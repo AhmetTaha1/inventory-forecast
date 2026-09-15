@@ -1,0 +1,1055 @@
+{
+  "generatedAt": "2026-09-15T09:55:49.987Z",
+  "shop": "test-invoice-rwnvhjox.myshopify.com",
+  "daysBack": 180,
+  "orders": [
+    {
+      "daysAgo": 179,
+      "iso": "2026-03-20T17:29:00.000Z",
+      "items": [
+        {
+          "title": "The Minimal Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060071313571",
+          "qty": 2
+        },
+        {
+          "title": "The Complete Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060070723747",
+          "qty": 1
+        },
+        {
+          "title": "The Videographer Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060071346339",
+          "qty": 5
+        }
+      ]
+    },
+    {
+      "daysAgo": 176,
+      "iso": "2026-03-23T11:57:00.000Z",
+      "items": [
+        {
+          "title": "The Minimal Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060071313571",
+          "qty": 3
+        },
+        {
+          "title": "The Videographer Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060071346339",
+          "qty": 4
+        }
+      ]
+    },
+    {
+      "daysAgo": 173,
+      "iso": "2026-03-26T12:15:00.000Z",
+      "items": [
+        {
+          "title": "The Minimal Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060071313571",
+          "qty": 2
+        },
+        {
+          "title": "The Videographer Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060071346339",
+          "qty": 5
+        }
+      ]
+    },
+    {
+      "daysAgo": 170,
+      "iso": "2026-03-29T17:11:00.000Z",
+      "items": [
+        {
+          "title": "The Minimal Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060071313571",
+          "qty": 2
+        },
+        {
+          "title": "The Videographer Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060071346339",
+          "qty": 4
+        }
+      ]
+    },
+    {
+      "daysAgo": 167,
+      "iso": "2026-04-01T12:38:00.000Z",
+      "items": [
+        {
+          "title": "The Minimal Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060071313571",
+          "qty": 2
+        },
+        {
+          "title": "The Complete Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060070723747",
+          "qty": 1
+        },
+        {
+          "title": "The Videographer Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060071346339",
+          "qty": 3
+        }
+      ]
+    },
+    {
+      "daysAgo": 164,
+      "iso": "2026-04-04T17:50:00.000Z",
+      "items": [
+        {
+          "title": "The Minimal Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060071313571",
+          "qty": 2
+        },
+        {
+          "title": "The Videographer Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060071346339",
+          "qty": 4
+        }
+      ]
+    },
+    {
+      "daysAgo": 161,
+      "iso": "2026-04-07T10:40:00.000Z",
+      "items": [
+        {
+          "title": "The Minimal Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060071313571",
+          "qty": 3
+        },
+        {
+          "title": "The Videographer Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060071346339",
+          "qty": 6
+        }
+      ]
+    },
+    {
+      "daysAgo": 158,
+      "iso": "2026-04-10T09:22:00.000Z",
+      "items": [
+        {
+          "title": "The Minimal Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060071313571",
+          "qty": 2
+        },
+        {
+          "title": "The Videographer Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060071346339",
+          "qty": 4
+        }
+      ]
+    },
+    {
+      "daysAgo": 155,
+      "iso": "2026-04-13T13:09:00.000Z",
+      "items": [
+        {
+          "title": "The Minimal Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060071313571",
+          "qty": 2
+        },
+        {
+          "title": "The Complete Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060070723747",
+          "qty": 1
+        },
+        {
+          "title": "The Videographer Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060071346339",
+          "qty": 4
+        }
+      ]
+    },
+    {
+      "daysAgo": 152,
+      "iso": "2026-04-16T13:27:00.000Z",
+      "items": [
+        {
+          "title": "The Minimal Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060071313571",
+          "qty": 2
+        },
+        {
+          "title": "The Videographer Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060071346339",
+          "qty": 3
+        }
+      ]
+    },
+    {
+      "daysAgo": 149,
+      "iso": "2026-04-19T13:01:00.000Z",
+      "items": [
+        {
+          "title": "The Minimal Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060071313571",
+          "qty": 4
+        },
+        {
+          "title": "The Videographer Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060071346339",
+          "qty": 5
+        }
+      ]
+    },
+    {
+      "daysAgo": 146,
+      "iso": "2026-04-22T17:59:00.000Z",
+      "items": [
+        {
+          "title": "The Minimal Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060071313571",
+          "qty": 2
+        },
+        {
+          "title": "The Videographer Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060071346339",
+          "qty": 6
+        }
+      ]
+    },
+    {
+      "daysAgo": 143,
+      "iso": "2026-04-25T17:52:00.000Z",
+      "items": [
+        {
+          "title": "The Minimal Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060071313571",
+          "qty": 2
+        },
+        {
+          "title": "The Complete Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060070723747",
+          "qty": 1
+        },
+        {
+          "title": "The Videographer Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060071346339",
+          "qty": 4
+        }
+      ]
+    },
+    {
+      "daysAgo": 140,
+      "iso": "2026-04-28T18:25:00.000Z",
+      "items": [
+        {
+          "title": "The Minimal Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060071313571",
+          "qty": 3
+        },
+        {
+          "title": "The Videographer Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060071346339",
+          "qty": 4
+        }
+      ]
+    },
+    {
+      "daysAgo": 137,
+      "iso": "2026-05-01T12:56:00.000Z",
+      "items": [
+        {
+          "title": "The Minimal Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060071313571",
+          "qty": 3
+        },
+        {
+          "title": "The Videographer Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060071346339",
+          "qty": 5
+        }
+      ]
+    },
+    {
+      "daysAgo": 134,
+      "iso": "2026-05-04T10:52:00.000Z",
+      "items": [
+        {
+          "title": "The Minimal Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060071313571",
+          "qty": 3
+        },
+        {
+          "title": "The Videographer Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060071346339",
+          "qty": 4
+        }
+      ]
+    },
+    {
+      "daysAgo": 131,
+      "iso": "2026-05-07T10:03:00.000Z",
+      "items": [
+        {
+          "title": "The Minimal Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060071313571",
+          "qty": 2
+        },
+        {
+          "title": "The Complete Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060070723747",
+          "qty": 1
+        },
+        {
+          "title": "The Videographer Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060071346339",
+          "qty": 3
+        }
+      ]
+    },
+    {
+      "daysAgo": 128,
+      "iso": "2026-05-10T18:01:00.000Z",
+      "items": [
+        {
+          "title": "The Minimal Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060071313571",
+          "qty": 4
+        },
+        {
+          "title": "The Videographer Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060071346339",
+          "qty": 6
+        }
+      ]
+    },
+    {
+      "daysAgo": 125,
+      "iso": "2026-05-13T11:50:00.000Z",
+      "items": [
+        {
+          "title": "The Minimal Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060071313571",
+          "qty": 2
+        },
+        {
+          "title": "The Videographer Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060071346339",
+          "qty": 6
+        }
+      ]
+    },
+    {
+      "daysAgo": 122,
+      "iso": "2026-05-16T11:23:00.000Z",
+      "items": [
+        {
+          "title": "The Minimal Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060071313571",
+          "qty": 3
+        },
+        {
+          "title": "The Videographer Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060071346339",
+          "qty": 5
+        }
+      ]
+    },
+    {
+      "daysAgo": 119,
+      "iso": "2026-05-19T17:35:00.000Z",
+      "items": [
+        {
+          "title": "The Minimal Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060071313571",
+          "qty": 3
+        },
+        {
+          "title": "The Complete Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060070723747",
+          "qty": 1
+        },
+        {
+          "title": "The Videographer Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060071346339",
+          "qty": 5
+        }
+      ]
+    },
+    {
+      "daysAgo": 116,
+      "iso": "2026-05-22T15:45:00.000Z",
+      "items": [
+        {
+          "title": "The Minimal Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060071313571",
+          "qty": 4
+        },
+        {
+          "title": "The Videographer Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060071346339",
+          "qty": 6
+        }
+      ]
+    },
+    {
+      "daysAgo": 113,
+      "iso": "2026-05-25T11:52:00.000Z",
+      "items": [
+        {
+          "title": "The Minimal Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060071313571",
+          "qty": 2
+        },
+        {
+          "title": "The Videographer Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060071346339",
+          "qty": 4
+        }
+      ]
+    },
+    {
+      "daysAgo": 110,
+      "iso": "2026-05-28T14:46:00.000Z",
+      "items": [
+        {
+          "title": "The Minimal Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060071313571",
+          "qty": 2
+        },
+        {
+          "title": "The Videographer Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060071346339",
+          "qty": 3
+        }
+      ]
+    },
+    {
+      "daysAgo": 107,
+      "iso": "2026-05-31T17:38:00.000Z",
+      "items": [
+        {
+          "title": "The Minimal Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060071313571",
+          "qty": 4
+        },
+        {
+          "title": "The Complete Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060070723747",
+          "qty": 1
+        },
+        {
+          "title": "The Videographer Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060071346339",
+          "qty": 5
+        }
+      ]
+    },
+    {
+      "daysAgo": 104,
+      "iso": "2026-06-03T13:18:00.000Z",
+      "items": [
+        {
+          "title": "The Minimal Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060071313571",
+          "qty": 3
+        },
+        {
+          "title": "The Videographer Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060071346339",
+          "qty": 6
+        }
+      ]
+    },
+    {
+      "daysAgo": 101,
+      "iso": "2026-06-06T11:43:00.000Z",
+      "items": [
+        {
+          "title": "The Minimal Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060071313571",
+          "qty": 3
+        },
+        {
+          "title": "The Videographer Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060071346339",
+          "qty": 6
+        }
+      ]
+    },
+    {
+      "daysAgo": 98,
+      "iso": "2026-06-09T13:13:00.000Z",
+      "items": [
+        {
+          "title": "The Minimal Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060071313571",
+          "qty": 3
+        },
+        {
+          "title": "The Videographer Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060071346339",
+          "qty": 5
+        }
+      ]
+    },
+    {
+      "daysAgo": 95,
+      "iso": "2026-06-12T15:14:00.000Z",
+      "items": [
+        {
+          "title": "The Minimal Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060071313571",
+          "qty": 3
+        },
+        {
+          "title": "The Complete Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060070723747",
+          "qty": 1
+        },
+        {
+          "title": "The Videographer Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060071346339",
+          "qty": 4
+        }
+      ]
+    },
+    {
+      "daysAgo": 92,
+      "iso": "2026-06-15T11:15:00.000Z",
+      "items": [
+        {
+          "title": "The Minimal Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060071313571",
+          "qty": 3
+        },
+        {
+          "title": "The Videographer Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060071346339",
+          "qty": 6
+        }
+      ]
+    },
+    {
+      "daysAgo": 89,
+      "iso": "2026-06-18T14:06:00.000Z",
+      "items": [
+        {
+          "title": "The Minimal Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060071313571",
+          "qty": 4
+        }
+      ]
+    },
+    {
+      "daysAgo": 86,
+      "iso": "2026-06-21T10:43:00.000Z",
+      "items": [
+        {
+          "title": "The Minimal Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060071313571",
+          "qty": 4
+        }
+      ]
+    },
+    {
+      "daysAgo": 83,
+      "iso": "2026-06-24T14:12:00.000Z",
+      "items": [
+        {
+          "title": "The Minimal Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060071313571",
+          "qty": 3
+        },
+        {
+          "title": "The Complete Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060070723747",
+          "qty": 1
+        }
+      ]
+    },
+    {
+      "daysAgo": 80,
+      "iso": "2026-06-27T14:50:00.000Z",
+      "items": [
+        {
+          "title": "The Minimal Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060071313571",
+          "qty": 4
+        }
+      ]
+    },
+    {
+      "daysAgo": 77,
+      "iso": "2026-06-30T12:22:00.000Z",
+      "items": [
+        {
+          "title": "The Minimal Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060071313571",
+          "qty": 2
+        }
+      ]
+    },
+    {
+      "daysAgo": 74,
+      "iso": "2026-07-03T14:43:00.000Z",
+      "items": [
+        {
+          "title": "The Minimal Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060071313571",
+          "qty": 2
+        }
+      ]
+    },
+    {
+      "daysAgo": 71,
+      "iso": "2026-07-06T10:35:00.000Z",
+      "items": [
+        {
+          "title": "The Minimal Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060071313571",
+          "qty": 2
+        },
+        {
+          "title": "The Complete Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060070723747",
+          "qty": 1
+        }
+      ]
+    },
+    {
+      "daysAgo": 68,
+      "iso": "2026-07-09T16:05:00.000Z",
+      "items": [
+        {
+          "title": "The Minimal Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060071313571",
+          "qty": 2
+        }
+      ]
+    },
+    {
+      "daysAgo": 65,
+      "iso": "2026-07-12T12:57:00.000Z",
+      "items": [
+        {
+          "title": "The Minimal Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060071313571",
+          "qty": 4
+        }
+      ]
+    },
+    {
+      "daysAgo": 62,
+      "iso": "2026-07-15T11:04:00.000Z",
+      "items": [
+        {
+          "title": "The Minimal Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060071313571",
+          "qty": 4
+        }
+      ]
+    },
+    {
+      "daysAgo": 59,
+      "iso": "2026-07-18T15:32:00.000Z",
+      "items": [
+        {
+          "title": "The Minimal Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060071313571",
+          "qty": 4
+        },
+        {
+          "title": "The Complete Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060070723747",
+          "qty": 1
+        },
+        {
+          "title": "The Inventory Not Tracked Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060070887587",
+          "qty": 1
+        }
+      ]
+    },
+    {
+      "daysAgo": 56,
+      "iso": "2026-07-21T10:40:00.000Z",
+      "items": [
+        {
+          "title": "The Minimal Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060071313571",
+          "qty": 2
+        }
+      ]
+    },
+    {
+      "daysAgo": 53,
+      "iso": "2026-07-24T17:43:00.000Z",
+      "items": [
+        {
+          "title": "The Minimal Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060071313571",
+          "qty": 2
+        }
+      ]
+    },
+    {
+      "daysAgo": 50,
+      "iso": "2026-07-27T13:27:00.000Z",
+      "items": [
+        {
+          "title": "The Minimal Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060071313571",
+          "qty": 3
+        }
+      ]
+    },
+    {
+      "daysAgo": 47,
+      "iso": "2026-07-30T09:27:00.000Z",
+      "items": [
+        {
+          "title": "The Minimal Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060071313571",
+          "qty": 4
+        },
+        {
+          "title": "The Complete Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060070723747",
+          "qty": 1
+        },
+        {
+          "title": "The Inventory Not Tracked Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060070887587",
+          "qty": 1
+        }
+      ]
+    },
+    {
+      "daysAgo": 45,
+      "iso": "2026-08-01T09:23:00.000Z",
+      "items": [
+        {
+          "title": "The Collection Snowboard: Hydrogen",
+          "variantId": "gid://shopify/ProductVariant/48060071280803",
+          "qty": 50
+        }
+      ]
+    },
+    {
+      "daysAgo": 44,
+      "iso": "2026-08-02T10:16:00.000Z",
+      "items": [
+        {
+          "title": "The Minimal Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060071313571",
+          "qty": 2
+        }
+      ]
+    },
+    {
+      "daysAgo": 41,
+      "iso": "2026-08-05T14:13:00.000Z",
+      "items": [
+        {
+          "title": "The Minimal Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060071313571",
+          "qty": 2
+        }
+      ]
+    },
+    {
+      "daysAgo": 38,
+      "iso": "2026-08-08T10:02:00.000Z",
+      "items": [
+        {
+          "title": "The Minimal Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060071313571",
+          "qty": 2
+        }
+      ]
+    },
+    {
+      "daysAgo": 35,
+      "iso": "2026-08-11T16:22:00.000Z",
+      "items": [
+        {
+          "title": "The Minimal Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060071313571",
+          "qty": 3
+        },
+        {
+          "title": "The Complete Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060070723747",
+          "qty": 1
+        },
+        {
+          "title": "The Inventory Not Tracked Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060070887587",
+          "qty": 1
+        }
+      ]
+    },
+    {
+      "daysAgo": 32,
+      "iso": "2026-08-14T17:05:00.000Z",
+      "items": [
+        {
+          "title": "The Minimal Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060071313571",
+          "qty": 3
+        }
+      ]
+    },
+    {
+      "daysAgo": 29,
+      "iso": "2026-08-17T18:04:00.000Z",
+      "items": [
+        {
+          "title": "The Minimal Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060071313571",
+          "qty": 2
+        },
+        {
+          "title": "The Complete Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060070723747",
+          "qty": 4
+        }
+      ]
+    },
+    {
+      "daysAgo": 26,
+      "iso": "2026-08-20T12:20:00.000Z",
+      "items": [
+        {
+          "title": "The Minimal Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060071313571",
+          "qty": 2
+        },
+        {
+          "title": "The Complete Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060070723747",
+          "qty": 3
+        }
+      ]
+    },
+    {
+      "daysAgo": 23,
+      "iso": "2026-08-23T10:01:00.000Z",
+      "items": [
+        {
+          "title": "The Minimal Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060071313571",
+          "qty": 2
+        },
+        {
+          "title": "The Complete Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060070723747",
+          "qty": 4
+        },
+        {
+          "title": "The Inventory Not Tracked Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060070887587",
+          "qty": 1
+        }
+      ]
+    },
+    {
+      "daysAgo": 20,
+      "iso": "2026-08-26T10:45:00.000Z",
+      "items": [
+        {
+          "title": "The Minimal Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060071313571",
+          "qty": 2
+        },
+        {
+          "title": "The Complete Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060070723747",
+          "qty": 4
+        },
+        {
+          "title": "The Compare at Price Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060071051427",
+          "qty": 2
+        }
+      ]
+    },
+    {
+      "daysAgo": 17,
+      "iso": "2026-08-29T18:40:00.000Z",
+      "items": [
+        {
+          "title": "The Minimal Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060071313571",
+          "qty": 3
+        },
+        {
+          "title": "The Complete Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060070723747",
+          "qty": 5
+        },
+        {
+          "title": "The Compare at Price Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060071051427",
+          "qty": 3
+        }
+      ]
+    },
+    {
+      "daysAgo": 14,
+      "iso": "2026-09-01T18:01:00.000Z",
+      "items": [
+        {
+          "title": "The Minimal Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060071313571",
+          "qty": 4
+        },
+        {
+          "title": "The Complete Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060070723747",
+          "qty": 5
+        },
+        {
+          "title": "The Compare at Price Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060071051427",
+          "qty": 2
+        }
+      ]
+    },
+    {
+      "daysAgo": 11,
+      "iso": "2026-09-04T10:34:00.000Z",
+      "items": [
+        {
+          "title": "The Minimal Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060071313571",
+          "qty": 3
+        },
+        {
+          "title": "The Complete Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060070723747",
+          "qty": 5
+        },
+        {
+          "title": "The Compare at Price Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060071051427",
+          "qty": 3
+        },
+        {
+          "title": "The Inventory Not Tracked Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060070887587",
+          "qty": 1
+        }
+      ]
+    },
+    {
+      "daysAgo": 8,
+      "iso": "2026-09-07T10:35:00.000Z",
+      "items": [
+        {
+          "title": "The Minimal Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060071313571",
+          "qty": 2
+        },
+        {
+          "title": "The Complete Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060070723747",
+          "qty": 4
+        },
+        {
+          "title": "The Compare at Price Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060071051427",
+          "qty": 2
+        }
+      ]
+    },
+    {
+      "daysAgo": 5,
+      "iso": "2026-09-10T15:16:00.000Z",
+      "items": [
+        {
+          "title": "The Minimal Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060071313571",
+          "qty": 2
+        },
+        {
+          "title": "The Complete Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060070723747",
+          "qty": 3
+        },
+        {
+          "title": "The Compare at Price Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060071051427",
+          "qty": 2
+        }
+      ]
+    },
+    {
+      "daysAgo": 2,
+      "iso": "2026-09-13T17:42:00.000Z",
+      "items": [
+        {
+          "title": "The Minimal Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060071313571",
+          "qty": 4
+        },
+        {
+          "title": "The Complete Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060070723747",
+          "qty": 3
+        },
+        {
+          "title": "The Compare at Price Snowboard",
+          "variantId": "gid://shopify/ProductVariant/48060071051427",
+          "qty": 2
+        }
+      ]
+    }
+  ],
+  "scenarios": [
+    {
+      "title": "The Minimal Snowboard",
+      "tests": "Duzenli satis",
+      "expect": "Makul bir tukenme gunu. Temel durum."
+    },
+    {
+      "title": "The Complete Snowboard",
+      "tests": "Son ayda 3 katina cikan satis",
+      "expect": "Trendi yakalamali. Duz ortalama fazla iyimser kalir."
+    },
+    {
+      "title": "The Videographer Snowboard",
+      "tests": "Mevsimsel patlama, sonra olu sezon",
+      "expect": "ASIRI TAHMIN TUZAGI. 180 gunun duz ortalamasi 'hizli satiyor' der, gercekte son 3 aydir hic satmiyor."
+    },
+    {
+      "title": "The Collection Snowboard: Hydrogen",
+      "tests": "Tek seferlik toptan siparis",
+      "expect": "TA3 TUZAGI. 45 gun once tek seferde 50 adet. Motor bunu 'gunluk hiz' sanip 'yarin bitecek' dememeli."
+    },
+    {
+      "title": "The Compare at Price Snowboard",
+      "tests": "Az stok (10), duzenli satis",
+      "expect": "ACIL uyari vermeli. En kritik urun bu olmali."
+    },
+    {
+      "title": "The Inventory Not Tracked Snowboard",
+      "tests": "Stok takibi kapali urun",
+      "expect": "Tahmine HIC girmemeli. Stok bilgisi olmayan urune tahmin yapilamaz."
+    },
+    {
+      "title": "Selling Plans Ski Wax",
+      "tests": "Hic satilmamis, stok 30",
+      "expect": "OLU STOK raporunda cikmali."
+    },
+    {
+      "title": "The Hidden Snowboard",
+      "tests": "Hic satilmamis, gizli urun",
+      "expect": "OLU STOK raporunda cikmali."
+    },
+    {
+      "title": "The Archived Snowboard",
+      "tests": "Arsivlenmis urun",
+      "expect": "Hicbir listede gorunmemeli."
+    },
+    {
+      "title": "Gift Card",
+      "tests": "Envantersiz urun",
+      "expect": "Tahmine girmemeli."
+    }
+  ]
+}
