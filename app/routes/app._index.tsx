@@ -7,10 +7,15 @@ import type {
 import { useFetcher } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
+import { fetchSalesSnapshot, logSnapshot } from "../lib/sales.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  await authenticate.admin(request);
+  const { admin } = await authenticate.admin(request);
+
+  const t0 = Date.now();
+  const snapshot = await fetchSalesSnapshot(admin);
+  logSnapshot(snapshot, Date.now() - t0);
 
   return null;
 };
