@@ -1,5 +1,8 @@
 // app/lib/sales.server.ts
-// Adım 4: veri boru hattı. Hesap YOK — sadece çek, filtrele, topla.
+// Adım 4: veri boru hattı. Adım 5'te üç değişiklik eklendi (aşağıda işaretli):
+//   1) isGiftCard alanı
+//   2) Mağaza saat dilimine göre gün hesaplama (UTC yerine)
+//   3) logSnapshot lokasyon toplama bug fix
 
 type Admin = {
     graphql: (
@@ -15,6 +18,7 @@ export type VariantInfo = {
     productTitle: string;
     status: string; // ACTIVE | DRAFT | ARCHIVED
     tracked: boolean;
+    isGiftCard: boolean; // <-- YENİ (Adım 5)
     available: number; // tüm lokasyonların toplamı
     byLocation: Record<string, number>;
     levelsTruncated: boolean;
@@ -22,11 +26,12 @@ export type VariantInfo = {
 
 export type VariantSales = {
     units: number;
-    byDay: Record<string, number>; // "2026-03-21" -> adet (Faz 2 için ham seri)
+    byDay: Record<string, number>; // "2026-03-21" -> adet (mağaza saat dilimi)
 };
 
 export type SalesSnapshot = {
     since: string;
+    shopTimezone: string; // <-- YENİ (Adım 5)
     variants: Map<string, VariantInfo>;
     sales: Map<string, VariantSales>;
     stats: {
@@ -41,6 +46,14 @@ export type SalesSnapshot = {
     };
 };
 
+// --- YENİ (Adım 5): mağaza saat dilimini almak için ---
+const SHOP_QUERY = `#graphql
+  query InvShop {
+    shop {
+      ianaTimezone
+    }
+  }`;
+
 const VARIANTS_QUERY = `#graphql
   query InvVariants($cursor: String) {
     productVariants(first: 50, after: $cursor) {
@@ -48,7 +61,7 @@ const VARIANTS_QUERY = `#graphql
       nodes {
         id
         title
-        product { id title status }
+        product { id title status isGiftCard }
         inventoryItem {
           tracked
           inventoryLevels(first: 10) {
@@ -108,7 +121,22 @@ async function gql(admin: Admin, query: string, variables: Record<string, unknow
     return body.data;
 }
 
+// --- YENİ (Adım 5): UTC bir tarihi mağaza saat dilimindeki "YYYY-MM-DD" gününe çevirir ---
+function toShopDay(isoUtc: string, timeZone: string): string {
+    // en-CA formatı doğrudan YYYY-MM-DD üretir, ayrıca parse gerektirmez
+    return new Intl.DateTimeFormat("en-CA", {
+        timeZone,
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+    }).format(new Date(isoUtc));
+}
+
 export async function fetchSalesSnapshot(admin: Admin, days = 365): Promise<SalesSnapshot> {
+    // --- YENİ (Adım 5): mağaza saat dilimini bir kere çek ---
+    const shopData = await gql(admin, SHOP_QUERY, {});
+    const shopTimezone: string = shopData.shop?.ianaTimezone ?? "UTC";
+
     const since = new Date(Date.now() - days * 86_400_000).toISOString().slice(0, 10);
     const stats: SalesSnapshot["stats"] = {
         variantPages: 0, orderPages: 0, ordersSeen: 0, ordersCancelled: 0,
@@ -139,6 +167,7 @@ export async function fetchSalesSnapshot(admin: Admin, days = 365): Promise<Sale
                 productTitle: v.product.title,
                 status: v.product.status,
                 tracked: v.inventoryItem?.tracked ?? false,
+                isGiftCard: v.product.isGiftCard ?? false, // <-- YENİ (Adım 5)
                 available,
                 byLocation,
                 levelsTruncated: levels?.pageInfo?.hasNextPage ?? false,
@@ -170,7 +199,8 @@ export async function fetchSalesSnapshot(admin: Admin, days = 365): Promise<Sale
         for (const order of conn.nodes) {
             stats.ordersSeen++;
             if (order.cancelledAt) { stats.ordersCancelled++; continue; }
-            const day = order.processedAt.slice(0, 10);
+            // DEĞİŞTİ (Adım 5): UTC slice yerine mağaza saat dilimine göre gün
+            const day = toShopDay(order.processedAt, shopTimezone);
             addLineItems(order.lineItems.nodes, day);
 
             // 25'ten fazla kalemli sipariş: kalanını ayrıca çek, sessizce kesme
@@ -185,15 +215,17 @@ export async function fetchSalesSnapshot(admin: Admin, days = 365): Promise<Sale
         cursor = conn.pageInfo.hasNextPage ? conn.pageInfo.endCursor : null;
     } while (cursor);
 
-    return { since, variants, sales, stats };
+    return { since, shopTimezone, variants, sales, stats };
 }
 
 export function logSnapshot(snap: SalesSnapshot, elapsedMs: number) {
     type Row = {
-        ürün: string; durum: string; takip: string; stok: number;
+        ürün: string; durum: string; takip: string; giftCard: string; stok: number;
         satış: number; ilkSatış: string; sonSatış: string; lokasyonlar: string;
     };
     const rows = new Map<string, Row>();
+    // DEĞİŞTİ (Adım 5): lokasyonları ürün bazında topluyoruz, tek varyantın üzerine yazmıyoruz
+    const locationTotals = new Map<string, Record<string, number>>();
     let archivedSkipped = 0;
     let truncatedLevels = 0;
 
@@ -203,8 +235,8 @@ export function logSnapshot(snap: SalesSnapshot, elapsedMs: number) {
         const s = snap.sales.get(v.variantId);
         const days = s ? Object.keys(s.byDay).sort() : [];
         const r = rows.get(v.productId) ?? {
-            ürün: v.productTitle, durum: v.status, takip: "", stok: 0,
-            satış: 0, ilkSatış: "-", sonSatış: "-", lokasyonlar: "",
+            ürün: v.productTitle, durum: v.status, takip: "", giftCard: v.isGiftCard ? "evet" : "hayır",
+            stok: 0, satış: 0, ilkSatış: "-", sonSatış: "-", lokasyonlar: "",
         };
         r.takip = r.takip === "" ? (v.tracked ? "evet" : "hayır")
             : r.takip === (v.tracked ? "evet" : "hayır") ? r.takip : "kısmen";
@@ -214,14 +246,27 @@ export function logSnapshot(snap: SalesSnapshot, elapsedMs: number) {
             if (r.ilkSatış === "-" || days[0] < r.ilkSatış) r.ilkSatış = days[0];
             if (r.sonSatış === "-" || days.at(-1)! > r.sonSatış) r.sonSatış = days.at(-1)!;
         }
-        r.lokasyonlar = Object.entries(v.byLocation).map(([k, n]) => `${k}:${n}`).join(" ");
+
+        // DEĞİŞTİ (Adım 5): bu ürünün lokasyon toplamına bu varyantın stoğunu ekle
+        const totals = locationTotals.get(v.productId) ?? {};
+        for (const [loc, qty] of Object.entries(v.byLocation)) {
+            totals[loc] = (totals[loc] ?? 0) + qty;
+        }
+        locationTotals.set(v.productId, totals);
+
         rows.set(v.productId, r);
+    }
+
+    // DEĞİŞTİ (Adım 5): satır yazdırılmadan hemen önce toplu lokasyon string'i oluştur
+    for (const [productId, r] of rows) {
+        const totals = locationTotals.get(productId) ?? {};
+        r.lokasyonlar = Object.entries(totals).map(([k, n]) => `${k}:${n}`).join(" ");
     }
 
     const sorted = [...rows.values()].sort((a, b) => b.satış - a.satış);
     const totalUnits = sorted.reduce((t, r) => t + r.satış, 0);
 
-    console.log(`\n=== Satış anlık görüntüsü (since ${snap.since}, ${(elapsedMs / 1000).toFixed(1)} sn) ===`);
+    console.log(`\n=== Satış anlık görüntüsü (since ${snap.since}, tz ${snap.shopTimezone}, ${(elapsedMs / 1000).toFixed(1)} sn) ===`);
     console.table(sorted);
     console.log({
         ...snap.stats,
