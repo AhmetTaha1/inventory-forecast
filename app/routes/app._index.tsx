@@ -1,18 +1,16 @@
-import { useEffect } from "react";
-import type {
-  ActionFunctionArgs,
-  HeadersFunction,
-  LoaderFunctionArgs,
-} from "react-router";
-import { useFetcher } from "react-router";
-import { useAppBridge } from "@shopify/app-bridge-react";
+import type { HeadersFunction, LoaderFunctionArgs } from "react-router";
+import { useLoaderData } from "react-router";
 import { authenticate } from "../shopify.server";
-import { fetchSalesSnapshot, logSnapshot, snapshotToPlain } from "../lib/sales.server"; // DEĞİŞTİ (Adım 3): snapshotToPlain eklendi
-import { computeForecast } from "../lib/forecast"; // YENİ (Adım 8)
+import { fetchSalesSnapshot, logSnapshot, snapshotToPlain } from "../lib/sales.server";
+import { computeForecast } from "../lib/forecast";
 import { boundary } from "@shopify/shopify-app-react-router/server";
-// YENİ (Adım 3): snapshot'ı diske yazmak için
+// snapshot'ı diske yazmak için (Adım 3'ten beri duruyor)
 import fs from "node:fs/promises";
 import path from "node:path";
+
+// YENİ (Adım 7): yeniden sipariş uyarısı eşiği. Mevcut turuncu/kırmızı rozet
+// eşiğiyle aynı sayı — yeni bir eşik icat etmek yerine tutarlılık tercih edildi.
+const REORDER_ALERT_DAYS = 14;
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin } = await authenticate.admin(request);
@@ -21,361 +19,177 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const snapshot = await fetchSalesSnapshot(admin);
   logSnapshot(snapshot, Date.now() - t0);
 
-  // YENİ (Adım 3): snapshot'ı proje köküne snapshot.json olarak yaz.
-  // Motoru (forecast.ts) bundan sonra Shopify'a bağlanmadan test edebiliriz.
+  // snapshot.json: motoru Shopify'a bağlanmadan test etmeyi sağlıyor (Adım 3).
   const snapshotPath = path.join(process.cwd(), "snapshot.json");
   await fs.writeFile(snapshotPath, JSON.stringify(snapshotToPlain(snapshot), null, 2));
   console.log(`[Adım 3] snapshot.json yazıldı: ${snapshotPath}`);
 
-  // YENİ (Adım 8): motoru gerçek veriyle çalıştır, özet tabloyu terminale bas.
-  // Arayüze henüz bağlanmadı (Faz 3'ün işi) — bu sadece uçtan uca doğrulama.
   const forecastResult = computeForecast(snapshot);
-  console.log(`\n[Adım 8] Tahmin motoru: ${forecastResult.forecasts.length} girdi, ${forecastResult.excluded.length} elenen.`);
-  console.table(
-    forecastResult.forecasts
-      .filter((f) => f.method === "weighted_average" || f.method === "already_out_of_stock")
-      .sort((a, b) => (a.stockoutInDays ?? Infinity) - (b.stockoutInDays ?? Infinity))
-      .map((f) => ({
-        ürün: f.productTitle,
-        varyant: f.variantTitle,
-        stok: f.available,
-        stockoutInDays: f.stockoutInDays,
-        confidence: f.confidence,
-        method: f.method,
-      })),
-  );
 
-  return null;
-};
+  // Draft ürünler tükenme ekranından gizleniyor (Adım 6, Bölüm 15 "A" kararı).
+  const visible = forecastResult.forecasts.filter((f) => f.status !== "DRAFT");
+  const hiddenDraftCount = forecastResult.forecasts.length - visible.length;
 
-export const action = async ({ request }: ActionFunctionArgs) => {
-  const { admin } = await authenticate.admin(request);
-  const color = ["Red", "Orange", "Yellow", "Green"][
-    Math.floor(Math.random() * 4)
+  const outOfStock = visible.filter((f) => f.method === "already_out_of_stock");
+
+  const soonToStockout = visible
+    .filter((f) => f.method === "weighted_average")
+    .sort((a, b) => (a.stockoutInDays ?? Infinity) - (b.stockoutInDays ?? Infinity));
+
+  // YENİ (Adım 7): "Tahmin yapılamayanlar" ikiye ayrıldı.
+  // - insufficientData: veri yetersiz (çoğunlukla yeni ürün) — ölü stok DEĞİL.
+  // - deadStock: geçmişte satmış, son dönemde satmayan, stoğu elde kalmış.
+  const insufficientData = visible.filter((f) => f.method === "insufficient_data");
+  const deadStock = visible.filter((f) => f.method === "no_recent_sales");
+
+  // YENİ (Adım 7): yeniden sipariş uyarısı — zaten tükenmiş + REORDER_ALERT_DAYS
+  // gün içinde tükenecekler. Ayrı bir liste değil, mevcut iki listenin bir
+  // alt kümesi; banner'da öne çıkarmak için burada birleştiriliyor.
+  const reorderAlerts = [
+    ...outOfStock,
+    ...soonToStockout.filter((f) => (f.stockoutInDays ?? Infinity) <= REORDER_ALERT_DAYS),
   ];
-  const response = await admin.graphql(
-    `#graphql
-      mutation populateProduct($product: ProductCreateInput!) {
-        productCreate(product: $product) {
-          product {
-            id
-            title
-            handle
-            status
-            variants(first: 10) {
-              edges {
-                node {
-                  id
-                  price
-                  barcode
-                  createdAt
-                }
-              }
-            }
-            demoInfo: metafield(namespace: "$app", key: "demo_info") {
-              jsonValue
-            }
-          }
-        }
-      }`,
-    {
-      variables: {
-        product: {
-          title: `${color} Snowboard`,
-          metafields: [
-            {
-              namespace: "$app",
-              key: "demo_info",
-              value: "Created by React Router Template",
-            },
-          ],
-        },
-      },
-    },
-  );
-  const responseJson = await response.json();
 
-  const product = responseJson.data!.productCreate!.product!;
-  const variantId = product.variants.edges[0]!.node!.id!;
-
-  const variantResponse = await admin.graphql(
-    `#graphql
-    mutation shopifyReactRouterTemplateUpdateVariant($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {
-      productVariantsBulkUpdate(productId: $productId, variants: $variants) {
-        productVariants {
-          id
-          price
-          barcode
-          createdAt
-        }
-      }
-    }`,
-    {
-      variables: {
-        productId: product.id,
-        variants: [{ id: variantId, price: "100.00" }],
-      },
-    },
+  console.log(
+    `\n[Adım 7] Görünür: ${visible.length} (${hiddenDraftCount} draft gizlendi). ` +
+      `Zaten tükenen: ${outOfStock.length}, yakında tükenecek: ${soonToStockout.length}, ` +
+      `ölü stok adayı: ${deadStock.length}, veri yetersiz: ${insufficientData.length}, ` +
+      `sipariş uyarısı: ${reorderAlerts.length}.`,
   );
 
-  const variantResponseJson = await variantResponse.json();
-
-  const metaobjectResponse = await admin.graphql(
-    `#graphql
-    mutation shopifyReactRouterTemplateUpsertMetaobject($handle: MetaobjectHandleInput!, $values: JSON!) {
-      metaobjectUpsert(handle: $handle, values: $values) {
-        metaobject {
-          id
-          handle
-          values
-        }
-        userErrors {
-          field
-          message
-        }
-      }
-    }`,
-    {
-      variables: {
-        handle: {
-          type: "$app:example",
-          handle: "demo-entry",
-        },
-        values: {
-          title: "Demo Entry",
-          description:
-            "This metaobject was created by the Shopify app template to demonstrate the metaobject API.",
-        },
-      },
-    },
-  );
-
-  const metaobjectResponseJson = await metaobjectResponse.json();
-
-  return {
-    product: responseJson!.data!.productCreate!.product,
-    variant:
-      variantResponseJson!.data!.productVariantsBulkUpdate!.productVariants,
-    metaobject: metaobjectResponseJson!.data!.metaobjectUpsert!.metaobject,
-  };
+  return { outOfStock, soonToStockout, insufficientData, deadStock, reorderAlerts };
 };
 
 export default function Index() {
-  const fetcher = useFetcher<typeof action>();
+  const { outOfStock, soonToStockout, insufficientData, deadStock, reorderAlerts } =
+    useLoaderData<typeof loader>();
 
-  const shopify = useAppBridge();
-  const isLoading =
-    ["loading", "submitting"].includes(fetcher.state) &&
-    fetcher.formMethod === "POST";
-
-  useEffect(() => {
-    if (fetcher.data?.product?.id) {
-      shopify.toast.show("Product created");
-    }
-  }, [fetcher.data?.product?.id, shopify]);
-
-  const generateProduct = () => fetcher.submit({}, { method: "POST" });
+  const hasUrgent = outOfStock.length > 0 || soonToStockout.length > 0;
 
   return (
-    <s-page heading="Shopify app template">
-      <s-button slot="primary-action" onClick={generateProduct}>
-        Generate a product
-      </s-button>
+    <s-page heading="Envanter Tahmini">
+      {reorderAlerts.length > 0 && (
+        <s-banner
+          heading={`${reorderAlerts.length} ürün acilen yeniden sipariş edilmeli`}
+          tone={outOfStock.length > 0 ? "critical" : "warning"}
+        >
+          {reorderAlerts
+            .slice(0, 3)
+            .map((f) => f.productTitle)
+            .join(", ")}
+          {reorderAlerts.length > 3 ? ` ve ${reorderAlerts.length - 3} ürün daha.` : "."}
+        </s-banner>
+      )}
 
-      <s-section heading="Congrats on creating a new Shopify app 🎉">
-        <s-paragraph>
-          This embedded app template uses{" "}
-          <s-link
-            href="https://shopify.dev/docs/apps/tools/app-bridge"
-            target="_blank"
-          >
-            App Bridge
-          </s-link>{" "}
-          interface examples like an{" "}
-          <s-link href="/app/additional">additional page in the app nav</s-link>
-          , as well as an{" "}
-          <s-link
-            href="https://shopify.dev/docs/api/admin-graphql"
-            target="_blank"
-          >
-            Admin GraphQL
-          </s-link>{" "}
-          mutation demo, to provide a starting point for app development.
-        </s-paragraph>
-      </s-section>
-      <s-section heading="Get started with products">
-        <s-paragraph>
-          Generate a product with GraphQL and get the JSON output for that
-          product. Learn more about the{" "}
-          <s-link
-            href="https://shopify.dev/docs/api/admin-graphql/latest/mutations/productCreate"
-            target="_blank"
-          >
-            productCreate
-          </s-link>{" "}
-          mutation in our API references. Includes a product{" "}
-          <s-link
-            href="https://shopify.dev/docs/apps/build/custom-data/metafields"
-            target="_blank"
-          >
-            metafield
-          </s-link>{" "}
-          and{" "}
-          <s-link
-            href="https://shopify.dev/docs/apps/build/custom-data/metaobjects"
-            target="_blank"
-          >
-            metaobject
-          </s-link>
-          .
-        </s-paragraph>
-        <s-stack direction="inline" gap="base">
-          <s-button
-            onClick={generateProduct}
-            {...(isLoading ? { loading: true } : {})}
-          >
-            Generate a product
-          </s-button>
-          {fetcher.data?.product && (
-            <s-button
-              onClick={() => {
-                shopify.intents.invoke?.("edit:shopify/Product", {
-                  value: fetcher.data?.product?.id,
-                });
-              }}
-              target="_blank"
-              variant="tertiary"
-            >
-              Edit product
-            </s-button>
-          )}
-        </s-stack>
-        {fetcher.data?.product && (
-          <s-section heading="productCreate mutation">
-            <s-stack direction="block" gap="base">
-              <s-box
-                padding="base"
-                borderWidth="base"
-                borderRadius="base"
-                background="subdued"
-              >
-                <pre
-                  style={{
-                    margin: 0,
-                    whiteSpace: "pre-wrap",
-                    wordBreak: "break-word",
-                  }}
-                >
-                  <code>{JSON.stringify(fetcher.data.product, null, 2)}</code>
-                </pre>
-              </s-box>
+      {!hasUrgent && (
+        <s-section>
+          <s-paragraph>
+            Şu an tükenmiş ya da yakında tükenecek görünen bir ürün yok.
+          </s-paragraph>
+        </s-section>
+      )}
 
-              <s-heading>productVariantsBulkUpdate mutation</s-heading>
-              <s-box
-                padding="base"
-                borderWidth="base"
-                borderRadius="base"
-                background="subdued"
-              >
-                <pre
-                  style={{
-                    margin: 0,
-                    whiteSpace: "pre-wrap",
-                    wordBreak: "break-word",
-                  }}
-                >
-                  <code>{JSON.stringify(fetcher.data.variant, null, 2)}</code>
-                </pre>
-              </s-box>
+      {outOfStock.length > 0 && (
+        <s-section heading={`Zaten tükenenler (${outOfStock.length})`}>
+          <s-table variant="auto">
+            <s-table-header-row>
+              <s-table-header>Ürün</s-table-header>
+              <s-table-header>Varyant</s-table-header>
+              <s-table-header>Durum</s-table-header>
+            </s-table-header-row>
+            <s-table-body>
+              {outOfStock.map((f) => (
+                <s-table-row key={f.variantId}>
+                  <s-table-cell>{f.productTitle}</s-table-cell>
+                  <s-table-cell>{f.variantTitle}</s-table-cell>
+                  <s-table-cell>
+                    <s-badge tone="critical">Tükendi</s-badge>
+                  </s-table-cell>
+                </s-table-row>
+              ))}
+            </s-table-body>
+          </s-table>
+        </s-section>
+      )}
 
-              <s-heading>metaobjectUpsert mutation</s-heading>
-              <s-box
-                padding="base"
-                borderWidth="base"
-                borderRadius="base"
-                background="subdued"
-              >
-                <pre
-                  style={{
-                    margin: 0,
-                    whiteSpace: "pre-wrap",
-                    wordBreak: "break-word",
-                  }}
-                >
-                  <code>
-                    {JSON.stringify(fetcher.data.metaobject, null, 2)}
-                  </code>
-                </pre>
-              </s-box>
-            </s-stack>
-          </s-section>
-        )}
-      </s-section>
+      {soonToStockout.length > 0 && (
+        <s-section heading={`Yakında tükenecekler (${soonToStockout.length})`}>
+          <s-table variant="auto">
+            <s-table-header-row>
+              <s-table-header>Ürün</s-table-header>
+              <s-table-header>Varyant</s-table-header>
+              <s-table-header>Stok</s-table-header>
+              <s-table-header>Günlük satış</s-table-header>
+              <s-table-header>Tükenmeye kalan</s-table-header>
+            </s-table-header-row>
+            <s-table-body>
+              {soonToStockout.map((f) => {
+                const days = Math.round(f.stockoutInDays ?? 0);
+                const tone = days <= 7 ? "critical" : days <= 21 ? "warning" : "info";
+                return (
+                  <s-table-row key={f.variantId}>
+                    <s-table-cell>{f.productTitle}</s-table-cell>
+                    <s-table-cell>{f.variantTitle}</s-table-cell>
+                    <s-table-cell>{f.available}</s-table-cell>
+                    <s-table-cell>{f.dailyRate?.toFixed(2) ?? "-"}</s-table-cell>
+                    <s-table-cell>
+                      <s-badge tone={tone}>{`${days} gün`}</s-badge>
+                      {f.confidence === "low" && <s-text> (düşük güven)</s-text>}
+                    </s-table-cell>
+                  </s-table-row>
+                );
+              })}
+            </s-table-body>
+          </s-table>
+        </s-section>
+      )}
 
-      <s-section slot="aside" heading="App template specs">
-        <s-paragraph>
-          <s-text>Framework: </s-text>
-          <s-link href="https://reactrouter.com/" target="_blank">
-            React Router
-          </s-link>
-        </s-paragraph>
-        <s-paragraph>
-          <s-text>Interface: </s-text>
-          <s-link
-            href="https://shopify.dev/docs/api/app-home/using-polaris-components"
-            target="_blank"
-          >
-            Polaris web components
-          </s-link>
-        </s-paragraph>
-        <s-paragraph>
-          <s-text>API: </s-text>
-          <s-link
-            href="https://shopify.dev/docs/api/admin-graphql"
-            target="_blank"
-          >
-            GraphQL
-          </s-link>
-        </s-paragraph>
-        <s-paragraph>
-          <s-text>Custom data: </s-text>
-          <s-link
-            href="https://shopify.dev/docs/apps/build/custom-data"
-            target="_blank"
-          >
-            Metafields &amp; metaobjects
-          </s-link>
-        </s-paragraph>
-        <s-paragraph>
-          <s-text>Database: </s-text>
-          <s-link href="https://www.prisma.io/" target="_blank">
-            Prisma
-          </s-link>
-        </s-paragraph>
-      </s-section>
+      {deadStock.length > 0 && (
+        <s-section heading={`Ölü stok adayları (${deadStock.length})`}>
+          <s-paragraph>
+            Geçmişte satmış ama son dönemde hiç satışı olmayan, stoğu elde
+            kalmış ürünler.
+          </s-paragraph>
+          <s-table variant="auto">
+            <s-table-header-row>
+              <s-table-header>Ürün</s-table-header>
+              <s-table-header>Varyant</s-table-header>
+              <s-table-header>Stok</s-table-header>
+            </s-table-header-row>
+            <s-table-body>
+              {deadStock.map((f) => (
+                <s-table-row key={f.variantId}>
+                  <s-table-cell>{f.productTitle}</s-table-cell>
+                  <s-table-cell>{f.variantTitle}</s-table-cell>
+                  <s-table-cell>{f.available}</s-table-cell>
+                </s-table-row>
+              ))}
+            </s-table-body>
+          </s-table>
+        </s-section>
+      )}
 
-      <s-section slot="aside" heading="Next steps">
-        <s-unordered-list>
-          <s-list-item>
-            Build an{" "}
-            <s-link
-              href="https://shopify.dev/docs/apps/getting-started/build-app-example"
-              target="_blank"
-            >
-              example app
-            </s-link>
-          </s-list-item>
-          <s-list-item>
-            Explore Shopify&apos;s API with{" "}
-            <s-link
-              href="https://shopify.dev/docs/apps/tools/graphiql-admin-api"
-              target="_blank"
-            >
-              GraphiQL
-            </s-link>
-          </s-list-item>
-        </s-unordered-list>
-      </s-section>
+      {insufficientData.length > 0 && (
+        <s-section heading={`Tahmin yapılamayanlar (${insufficientData.length})`}>
+          <s-paragraph>
+            Yeterli satış verisi olmayan ürünler — çoğunlukla yeni eklenmiş.
+          </s-paragraph>
+          <s-table variant="auto">
+            <s-table-header-row>
+              <s-table-header>Ürün</s-table-header>
+              <s-table-header>Varyant</s-table-header>
+            </s-table-header-row>
+            <s-table-body>
+              {insufficientData.map((f) => (
+                <s-table-row key={f.variantId}>
+                  <s-table-cell>{f.productTitle}</s-table-cell>
+                  <s-table-cell>{f.variantTitle}</s-table-cell>
+                </s-table-row>
+              ))}
+            </s-table-body>
+          </s-table>
+        </s-section>
+      )}
     </s-page>
   );
 }
