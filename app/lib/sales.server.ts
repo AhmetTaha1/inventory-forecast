@@ -218,6 +218,36 @@ export async function fetchSalesSnapshot(admin: Admin, days = 365): Promise<Sale
     return { since, shopTimezone, variants, sales, stats };
 }
 
+// --- YENİ (Adım 3): snapshot'ı diske yazıp geri okumak için ---
+// Map JSON.stringify ile doğrudan yazılamıyor, çift dizi ([key, value][]) formatına çeviriyoruz.
+export type SnapshotPlain = {
+    since: string;
+    shopTimezone: string;
+    variants: [string, VariantInfo][];
+    sales: [string, VariantSales][];
+    stats: SalesSnapshot["stats"];
+};
+
+export function snapshotToPlain(snap: SalesSnapshot): SnapshotPlain {
+    return {
+        since: snap.since,
+        shopTimezone: snap.shopTimezone,
+        variants: [...snap.variants.entries()],
+        sales: [...snap.sales.entries()],
+        stats: snap.stats,
+    };
+}
+
+export function snapshotFromPlain(plain: SnapshotPlain): SalesSnapshot {
+    return {
+        since: plain.since,
+        shopTimezone: plain.shopTimezone,
+        variants: new Map(plain.variants),
+        sales: new Map(plain.sales),
+        stats: plain.stats,
+    };
+}
+
 export function logSnapshot(snap: SalesSnapshot, elapsedMs: number) {
     type Row = {
         ürün: string; durum: string; takip: string; giftCard: string; stok: number;

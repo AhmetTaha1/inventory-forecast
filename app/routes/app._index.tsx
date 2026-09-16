@@ -7,8 +7,11 @@ import type {
 import { useFetcher } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
-import { fetchSalesSnapshot, logSnapshot } from "../lib/sales.server";
+import { fetchSalesSnapshot, logSnapshot, snapshotToPlain } from "../lib/sales.server"; // DEĞİŞTİ (Adım 3): snapshotToPlain eklendi
 import { boundary } from "@shopify/shopify-app-react-router/server";
+// YENİ (Adım 3): snapshot'ı diske yazmak için
+import fs from "node:fs/promises";
+import path from "node:path";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin } = await authenticate.admin(request);
@@ -16,6 +19,12 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const t0 = Date.now();
   const snapshot = await fetchSalesSnapshot(admin);
   logSnapshot(snapshot, Date.now() - t0);
+
+  // YENİ (Adım 3): snapshot'ı proje köküne snapshot.json olarak yaz.
+  // Motoru (forecast.ts) bundan sonra Shopify'a bağlanmadan test edebiliriz.
+  const snapshotPath = path.join(process.cwd(), "snapshot.json");
+  await fs.writeFile(snapshotPath, JSON.stringify(snapshotToPlain(snapshot), null, 2));
+  console.log(`[Adım 3] snapshot.json yazıldı: ${snapshotPath}`);
 
   return null;
 };
