@@ -45,16 +45,21 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   // YENİ (Adım 7): yeniden sipariş uyarısı — zaten tükenmiş + REORDER_ALERT_DAYS
   // gün içinde tükenecekler. Ayrı bir liste değil, mevcut iki listenin bir
   // alt kümesi; banner'da öne çıkarmak için burada birleştiriliyor.
+  // Yuvarlanmış değer kullanılıyor çünkü ekranda da yuvarlanmış gösteriliyor
+  // (örn. 14,4 gün ekranda "14 gün" yazar) — ikisi farklı sayı kullanırsa
+  // kullanıcı "14 gün yazan ürün neden acil listede değil" diye şaşırır.
   const reorderAlerts = [
     ...outOfStock,
-    ...soonToStockout.filter((f) => (f.stockoutInDays ?? Infinity) <= REORDER_ALERT_DAYS),
+    ...soonToStockout.filter(
+      (f) => Math.round(f.stockoutInDays ?? Infinity) <= REORDER_ALERT_DAYS,
+    ),
   ];
 
   console.log(
     `\n[Adım 7] Görünür: ${visible.length} (${hiddenDraftCount} draft gizlendi). ` +
-      `Zaten tükenen: ${outOfStock.length}, yakında tükenecek: ${soonToStockout.length}, ` +
-      `ölü stok adayı: ${deadStock.length}, veri yetersiz: ${insufficientData.length}, ` +
-      `sipariş uyarısı: ${reorderAlerts.length}.`,
+    `Zaten tükenen: ${outOfStock.length}, yakında tükenecek: ${soonToStockout.length}, ` +
+    `ölü stok adayı: ${deadStock.length}, veri yetersiz: ${insufficientData.length}, ` +
+    `sipariş uyarısı: ${reorderAlerts.length}.`,
   );
 
   return { outOfStock, soonToStockout, insufficientData, deadStock, reorderAlerts };
