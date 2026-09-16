@@ -1,73 +1,32 @@
 import type { HeadersFunction, LoaderFunctionArgs } from "react-router";
-import { useLoaderData } from "react-router";
+import { Link, useLoaderData } from "react-router";
 import { authenticate } from "../shopify.server";
-import { fetchSalesSnapshot, logSnapshot, snapshotToPlain } from "../lib/sales.server";
-import { computeForecast } from "../lib/forecast";
+import { getForecastGroups } from "../lib/forecastCache.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
-// snapshot'ı diske yazmak için (Adım 3'ten beri duruyor)
-import fs from "node:fs/promises";
-import path from "node:path";
-
-// YENİ (Adım 7): yeniden sipariş uyarısı eşiği. Mevcut turuncu/kırmızı rozet
-// eşiğiyle aynı sayı — yeni bir eşik icat etmek yerine tutarlılık tercih edildi.
-const REORDER_ALERT_DAYS = 14;
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { admin } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
 
-  const t0 = Date.now();
-  const snapshot = await fetchSalesSnapshot(admin);
-  logSnapshot(snapshot, Date.now() - t0);
+  const url = new URL(request.url);
+  const forceRefresh = url.searchParams.get("refresh") === "1";
 
-  // snapshot.json: motoru Shopify'a bağlanmadan test etmeyi sağlıyor (Adım 3).
-  const snapshotPath = path.join(process.cwd(), "snapshot.json");
-  await fs.writeFile(snapshotPath, JSON.stringify(snapshotToPlain(snapshot), null, 2));
-  console.log(`[Adım 3] snapshot.json yazıldı: ${snapshotPath}`);
+  const { groups, computedAt, fromCache } = await getForecastGroups(session.shop, admin, {
+    forceRefresh,
+  });
 
-  const forecastResult = computeForecast(snapshot);
-
-  // Draft ürünler tükenme ekranından gizleniyor (Adım 6, Bölüm 15 "A" kararı).
-  const visible = forecastResult.forecasts.filter((f) => f.status !== "DRAFT");
-  const hiddenDraftCount = forecastResult.forecasts.length - visible.length;
-
-  const outOfStock = visible.filter((f) => f.method === "already_out_of_stock");
-
-  const soonToStockout = visible
-    .filter((f) => f.method === "weighted_average")
-    .sort((a, b) => (a.stockoutInDays ?? Infinity) - (b.stockoutInDays ?? Infinity));
-
-  // YENİ (Adım 7): "Tahmin yapılamayanlar" ikiye ayrıldı.
-  // - insufficientData: veri yetersiz (çoğunlukla yeni ürün) — ölü stok DEĞİL.
-  // - deadStock: geçmişte satmış, son dönemde satmayan, stoğu elde kalmış.
-  const insufficientData = visible.filter((f) => f.method === "insufficient_data");
-  const deadStock = visible.filter((f) => f.method === "no_recent_sales");
-
-  // YENİ (Adım 7): yeniden sipariş uyarısı — zaten tükenmiş + REORDER_ALERT_DAYS
-  // gün içinde tükenecekler. Ayrı bir liste değil, mevcut iki listenin bir
-  // alt kümesi; banner'da öne çıkarmak için burada birleştiriliyor.
-  // Yuvarlanmış değer kullanılıyor çünkü ekranda da yuvarlanmış gösteriliyor
-  // (örn. 14,4 gün ekranda "14 gün" yazar) — ikisi farklı sayı kullanırsa
-  // kullanıcı "14 gün yazan ürün neden acil listede değil" diye şaşırır.
-  const reorderAlerts = [
-    ...outOfStock,
-    ...soonToStockout.filter(
-      (f) => Math.round(f.stockoutInDays ?? Infinity) <= REORDER_ALERT_DAYS,
-    ),
-  ];
-
-  console.log(
-    `\n[Adım 7] Görünür: ${visible.length} (${hiddenDraftCount} draft gizlendi). ` +
-    `Zaten tükenen: ${outOfStock.length}, yakında tükenecek: ${soonToStockout.length}, ` +
-    `ölü stok adayı: ${deadStock.length}, veri yetersiz: ${insufficientData.length}, ` +
-    `sipariş uyarısı: ${reorderAlerts.length}.`,
-  );
-
-  return { outOfStock, soonToStockout, insufficientData, deadStock, reorderAlerts };
+  return { ...groups, computedAt: computedAt.toISOString(), fromCache };
 };
 
 export default function Index() {
-  const { outOfStock, soonToStockout, insufficientData, deadStock, reorderAlerts } =
-    useLoaderData<typeof loader>();
+  const {
+    outOfStock,
+    soonToStockout,
+    insufficientData,
+    deadStock,
+    reorderAlerts,
+    computedAt,
+    fromCache,
+  } = useLoaderData<typeof loader>();
 
   const hasUrgent = outOfStock.length > 0 || soonToStockout.length > 0;
 
@@ -195,6 +154,14 @@ export default function Index() {
           </s-table>
         </s-section>
       )}
+
+      <s-section>
+        <s-paragraph>
+          Son hesaplama: {new Date(computedAt).toLocaleTimeString("tr-TR")}
+          {fromCache ? " (önbellekten)" : " (az önce yeniden hesaplandı)"} —{" "}
+          <Link to="?refresh=1">şimdi yenile</Link>
+        </s-paragraph>
+      </s-section>
     </s-page>
   );
 }
