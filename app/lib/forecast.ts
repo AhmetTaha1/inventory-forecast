@@ -78,6 +78,42 @@ function detectOneOff(sales: VariantSales | undefined): boolean {
     return maxDayUnits / sales.units > ONE_OFF_SHARE_THRESHOLD;
 }
 
+// --- YENİ (Adım 7): v7/v30/v90 ağırlıklı hız hesabı ---
+const WINDOW_WEIGHTS: { days: number; weight: number }[] = [
+    { days: 7, weight: 0.2 },
+    { days: 30, weight: 0.5 },
+    { days: 90, weight: 0.3 },
+];
+
+// excludeOneOffDay: true ise en yoğun gün hız hesabından tamamen çıkarılır (Hydrogen kuralı)
+function computeDailyRate(sales: VariantSales | undefined, now: Date, excludeOneOffDay: boolean): number | null {
+    if (!sales) return null;
+    let entries = Object.entries(sales.byDay);
+    if (entries.length === 0) return null;
+
+    if (excludeOneOffDay) {
+        let maxDay = entries[0];
+        for (const e of entries) if (e[1] > maxDay[1]) maxDay = e;
+        entries = entries.filter(([day]) => day !== maxDay[0]);
+    }
+    if (entries.length === 0) return null; // tüm satış tek bir one-off güne aitti
+
+    const firstDay = entries.map(([d]) => d).sort()[0];
+    const dayspan = daysSince(firstDay, now) + 1; // ilk satış günü dahil, bugüne kadar geçen gün sayısı
+
+    let weightedSum = 0;
+    for (const { days: windowSize, weight } of WINDOW_WEIGHTS) {
+        // Pencere, elimizdeki gerçek veri süresinden uzun olamaz (Compare at Price: 26 günlük veriyi 90'a bölme)
+        const effectiveWindow = Math.max(1, Math.min(windowSize, dayspan));
+        const windowSum = entries.reduce((sum, [day, qty]) => {
+            const age = daysSince(day, now);
+            return age < windowSize ? sum + qty : sum;
+        }, 0);
+        weightedSum += (windowSum / effectiveWindow) * weight;
+    }
+    return weightedSum; // ağırlıklar zaten toplamda 1.0
+}
+
 // --- Ana giriş noktası. `now` test edilebilirlik için parametre — vermezsen bugünün tarihi kullanılır. ---
 export function computeForecast(snapshot: SalesSnapshot, now: Date = new Date()): ForecastResult {
     const forecasts: VariantForecast[] = [];
@@ -99,8 +135,31 @@ export function computeForecast(snapshot: SalesSnapshot, now: Date = new Date())
         const confidence = computeConfidence(sales, now);
         const oneOffDetected = detectOneOff(sales);
 
-        // GEÇİCİ: dailyRate ve stockoutInDays henüz hesaplanmıyor. Adım 7'de eklenecek
-        // (v7/v30/v90 ağırlıklı hız + one-off ayıklama + sıfır stok koruması).
+        // YENİ (Adım 7): üç durum sırayla kontrol edilir.
+        let dailyRate: number | null = null;
+        let stockoutInDays: number | null = null;
+        let method: string;
+
+        if (v.available === 0) {
+            // Stok zaten 0. Sıfıra bölme yok, "zaten bitti" durumu net.
+            method = "already_out_of_stock";
+            stockoutInDays = 0;
+        } else if (confidence === "insufficient") {
+            // Veri yetersiz (Hydrogen dahil). Dürüstçe null bırakılıyor, hesap denenmiyor.
+            method = "insufficient_data";
+        } else {
+            dailyRate = computeDailyRate(sales, now, oneOffDetected);
+            if (dailyRate && dailyRate > 0) {
+                stockoutInDays = Math.round((v.available / dailyRate) * 10) / 10;
+                method = "weighted_average";
+            } else {
+                // Videographer tuzağı: veri geçmişi yeterli ama son dönemde hiç satış yok.
+                // "Hızlı satıyor" yalanı yerine dürüst sinyal.
+                dailyRate = 0;
+                method = "no_recent_sales";
+            }
+        }
+
         forecasts.push({
             variantId: v.variantId,
             variantTitle: v.variantTitle,
@@ -109,10 +168,10 @@ export function computeForecast(snapshot: SalesSnapshot, now: Date = new Date())
             status: v.status,
             confidence,
             oneOffDetected,
-            stockoutInDays: null, // GEÇİCİ, Adım 7
-            dailyRate: null, // GEÇİCİ, Adım 7
+            stockoutInDays,
+            dailyRate,
             available: v.available,
-            method: "not_implemented", // GEÇİCİ, Adım 7
+            method,
         });
     }
 
