@@ -32,3 +32,11 @@ model Session {
   refreshToken        String?
   refreshTokenExpires DateTime?
 }
+
+model ForecastSnapshot {
+  shop       String   @id
+  data       String
+  status     String   @default("ready") // "ready" | "computing"
+  computedAt DateTime @default(now())
+  lockedAt   DateTime?
+}
