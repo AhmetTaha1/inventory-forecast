@@ -8,6 +8,7 @@ import { useFetcher } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
 import { fetchSalesSnapshot, logSnapshot, snapshotToPlain } from "../lib/sales.server"; // DEĞİŞTİ (Adım 3): snapshotToPlain eklendi
+import { computeForecast } from "../lib/forecast"; // YENİ (Adım 8)
 import { boundary } from "@shopify/shopify-app-react-router/server";
 // YENİ (Adım 3): snapshot'ı diske yazmak için
 import fs from "node:fs/promises";
@@ -25,6 +26,24 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const snapshotPath = path.join(process.cwd(), "snapshot.json");
   await fs.writeFile(snapshotPath, JSON.stringify(snapshotToPlain(snapshot), null, 2));
   console.log(`[Adım 3] snapshot.json yazıldı: ${snapshotPath}`);
+
+  // YENİ (Adım 8): motoru gerçek veriyle çalıştır, özet tabloyu terminale bas.
+  // Arayüze henüz bağlanmadı (Faz 3'ün işi) — bu sadece uçtan uca doğrulama.
+  const forecastResult = computeForecast(snapshot);
+  console.log(`\n[Adım 8] Tahmin motoru: ${forecastResult.forecasts.length} girdi, ${forecastResult.excluded.length} elenen.`);
+  console.table(
+    forecastResult.forecasts
+      .filter((f) => f.method === "weighted_average" || f.method === "already_out_of_stock")
+      .sort((a, b) => (a.stockoutInDays ?? Infinity) - (b.stockoutInDays ?? Infinity))
+      .map((f) => ({
+        ürün: f.productTitle,
+        varyant: f.variantTitle,
+        stok: f.available,
+        stockoutInDays: f.stockoutInDays,
+        confidence: f.confidence,
+        method: f.method,
+      })),
+  );
 
   return null;
 };
