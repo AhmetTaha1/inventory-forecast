@@ -1,5 +1,5 @@
 import type { CSSProperties, ReactNode } from "react";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import type { HeadersFunction, LoaderFunctionArgs } from "react-router";
 import { useLoaderData, useNavigate, useNavigation } from "react-router";
 import { authenticate } from "../shopify.server";
@@ -25,8 +25,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
 const PAGE_SIZE = 25;
 
+// forecastCache.server.ts içindeki REORDER_ALERT_DAYS ile aynı olmalı.
+const URGENT_DAYS = 14;
+
 type Category = "out" | "soon" | "dead" | "nodata";
-type Filter = "all" | Category;
+type Filter = "all" | "urgent" | Category;
 
 type CategoryMeta = {
   label: string;
@@ -74,11 +77,17 @@ const CATEGORY_ORDER: Category[] = ["out", "soon", "dead", "nodata"];
 const ALL_META = { accent: "#008060", soft: "#E3F1DF", text: "#0C5132" };
 
 // Liste satırlarının sütun düzeni: Ürün · Durum · Stok · Günlük satış · Tükenme · Güven
-// Sütunlar arası boşluk artırıldı (gap 32px), sayı sütunlarına minimum genişlik verildi.
-const GRID_COLUMNS = "minmax(240px, 2fr) 170px minmax(70px, 90px) minmax(110px, 130px) minmax(220px, 1.7fr) 110px";
+const GRID_COLUMNS =
+  "minmax(240px, 2fr) 170px minmax(70px, 90px) minmax(110px, 130px) minmax(220px, 1.7fr) 110px";
 
 const PAGE_CSS = `
 @keyframes invf-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+.invf-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+}
 
 .invf-list-card {
   background: #FFFFFF;
@@ -86,6 +95,7 @@ const PAGE_CSS = `
   border-radius: 16px;
   box-shadow: 0 1px 2px rgba(0,0,0,0.04), 0 4px 16px rgba(0,0,0,0.04);
   overflow: hidden;
+  scroll-margin-top: 16px;
 }
 .invf-toolbar {
   display: flex;
@@ -136,6 +146,30 @@ const PAGE_CSS = `
   transition: background 120ms ease, border-color 120ms ease;
 }
 .invf-tab:hover { filter: brightness(0.98); }
+
+.invf-urgent-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: #FEE9E8;
+  border: 1px solid #F5C2BC;
+  font-size: 13px;
+  font-weight: 600;
+  color: #8E1F0B;
+}
+.invf-link-btn {
+  all: unset;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  color: #8E1F0B;
+  text-decoration: underline;
+}
 
 .invf-head, .invf-row {
   display: grid;
@@ -228,6 +262,14 @@ const PAGE_CSS = `
     color: #616161;
     margin-bottom: 4px;
   }
+}
+
+@media (max-width: 520px) {
+  .invf-summary { grid-template-columns: 1fr 1fr; }
+  .invf-toolbar { padding: 16px; }
+  .invf-row { padding: 16px; column-gap: 14px; }
+  .invf-tab { padding: 7px 10px; font-size: 12px; }
+  .invf-refresh-btn { width: 100%; justify-content: center; }
 }
 `;
 
@@ -405,6 +447,7 @@ function RefreshBar(props: RefreshBarProps) {
       </div>
       <button
         type="button"
+        className="invf-refresh-btn"
         style={buttonStyle}
         onClick={props.onRefresh}
         disabled={props.isRefreshing}
@@ -482,9 +525,7 @@ function CellLabel(props: { children: ReactNode }) {
   return <span className="invf-label">{props.children}</span>;
 }
 
-// Tükenme hücresi: "kaç gün kaldığı" ile "hangi tarihte tükeneceği" görsel
-// olarak ayrıştırıldı — biri dolgulu rozet (kalın), diğeri ayrı satırda,
-// takvim ikonlu, daha soluk metin. İkisi artık yan yana karışmıyor.
+// Tükenme hücresi: gün rozeti, altında ayrı satırda tarih, en altta ilerleme çubuğu.
 function RunwayCell(props: { days: number }) {
   const { days } = props;
   const bg = days <= 7 ? "#FEE9E8" : days <= 21 ? "#FFF4E0" : "#E3F1DF";
@@ -504,7 +545,7 @@ function RunwayCell(props: { days: number }) {
       </span>
       <div className="invf-date-row">
         <span>📅</span>
-        <span>{`${date}'e kadar`}</span>
+        <span>{`Tahmini tükenme: ${date}`}</span>
       </div>
       <div className="invf-bar">
         <span style={{ width: `${pct}%`, background: barColor }} />
@@ -535,6 +576,7 @@ export default function Index() {
   const [filter, setFilter] = useState<Filter>("all");
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
+  const listRef = useRef<HTMLDivElement>(null);
 
   const refresh = () => navigate("?refresh=1");
 
@@ -559,7 +601,14 @@ export default function Index() {
   const filteredRows = useMemo(() => {
     const q = query.trim().toLocaleLowerCase("tr-TR");
     return allRows.filter(({ item, category }) => {
-      if (filter !== "all" && category !== filter) return false;
+      if (filter === "urgent") {
+        const urgent =
+          category === "out" ||
+          (category === "soon" && Math.round(item.stockoutInDays ?? Infinity) <= URGENT_DAYS);
+        if (!urgent) return false;
+      } else if (filter !== "all" && category !== filter) {
+        return false;
+      }
       if (!q) return true;
       const haystack = `${item.productTitle} ${item.variantTitle}`.toLocaleLowerCase("tr-TR");
       return haystack.includes(q);
@@ -575,6 +624,16 @@ export default function Index() {
     setPage(1);
   }
 
+  function showUrgent() {
+    setFilter("urgent");
+    setQuery("");
+    setPage(1);
+    // Filtre uygulandıktan sonra listeye kaydır.
+    setTimeout(() => {
+      listRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 50);
+  }
+
   const lastUpdated = new Date(computedAt).toLocaleString("tr-TR", {
     day: "numeric",
     month: "long",
@@ -582,6 +641,11 @@ export default function Index() {
     minute: "2-digit",
     second: "2-digit",
   });
+
+  const bannerText =
+    outOfStock.length > 0
+      ? `${outOfStock.length} ürün tükendi, diğerleri ${URGENT_DAYS} gün içinde tükenmek üzere.`
+      : `Bu ürünlerin stoğu ${URGENT_DAYS} gün içinde tükenmek üzere.`;
 
   return (
     <s-page heading="Envanter Tahmini">
@@ -604,26 +668,16 @@ export default function Index() {
               heading={`${reorderAlerts.length} ürün için sipariş vakti geldi`}
               tone={outOfStock.length > 0 ? "critical" : "warning"}
             >
-              <s-stack gap="small-300">
-                <s-text>
-                  {reorderAlerts
-                    .slice(0, 3)
-                    .map((f) => f.productTitle)
-                    .join(", ")}
-                  {reorderAlerts.length > 3 ? ` ve ${reorderAlerts.length - 3} ürün daha.` : "."}
-                </s-text>
-                <s-text>Tükenmiş ya da 14 gün içinde tükenmesi beklenen ürünler.</s-text>
+              <s-stack gap="small-200">
+                <s-text>{bannerText}</s-text>
+                <s-stack direction="inline">
+                  <s-button onClick={showUrgent}>Acil ürünleri göster</s-button>
+                </s-stack>
               </s-stack>
             </s-banner>
           )}
 
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))",
-              gap: 12,
-            }}
-          >
+          <div className="invf-summary">
             {CATEGORY_ORDER.map((cat) => (
               <SummaryCard
                 key={cat}
@@ -636,7 +690,7 @@ export default function Index() {
           </div>
 
           {/* ------------------------- Ürün listesi ------------------------- */}
-          <div className="invf-list-card">
+          <div className="invf-list-card" ref={listRef}>
             <div className="invf-toolbar">
               <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
                 <span style={{ fontSize: 16, fontWeight: 700, color: "#1A1A1A" }}>
@@ -646,6 +700,22 @@ export default function Index() {
                   En acil olanlar en üstte · {filteredRows.length} ürün gösteriliyor
                 </span>
               </div>
+
+              {filter === "urgent" && (
+                <div className="invf-urgent-strip">
+                  <span>{`⚠ Acil ürünler gösteriliyor (${filteredRows.length})`}</span>
+                  <button
+                    type="button"
+                    className="invf-link-btn"
+                    onClick={() => {
+                      setFilter("all");
+                      setPage(1);
+                    }}
+                  >
+                    Filtreyi kaldır
+                  </button>
+                </div>
+              )}
 
               <div className="invf-search">
                 <span className="invf-search-icon">🔍</span>
