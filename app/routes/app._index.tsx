@@ -5,6 +5,7 @@ import { useLoaderData, useNavigate, useNavigation } from "react-router";
 import { authenticate } from "../shopify.server";
 import { getForecastGroups } from "../lib/forecastCache.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
+import { FeedbackButton } from "../components/FeedbackButton";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, session } = await authenticate.admin(request);
@@ -410,6 +411,13 @@ const PAGE_CSS = `
   transform: translateY(-3px) scale(1.06) !important;
   box-shadow: 0 10px 22px rgba(0,0,0,0.28) !important;
   background: #026B4F !important;
+}
+
+/* ------------------------------ Alt bölüm ------------------------------ */
+.invf-page-footer {
+  display: flex;
+  justify-content: center;
+  padding: 8px 0 4px;
 }
 
 /* ---------------------------------------------------------------------
@@ -1442,6 +1450,14 @@ export default function Index() {
                   gösterilir.
                 </div>
               )}
+            </div>
+
+            {/* Geri bildirim: sayfanın en altında, sade bir buton. Ayrı bir
+                bileşen dosyasında (app/components/FeedbackButton.tsx) —
+                bu dosya zaten büyük, yeni bileşenleri ayırmaya başlamak
+                Faz 6 öncesi temizlik listesindeki maddeyle de örtüşüyor. */}
+            <div className="invf-page-footer">
+              <FeedbackButton />
             </div>
           </div>
         </s-stack>
