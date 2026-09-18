@@ -1,5 +1,5 @@
 import type { CSSProperties, ReactNode } from "react";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { HeadersFunction, LoaderFunctionArgs } from "react-router";
 import { useLoaderData, useNavigate, useNavigation } from "react-router";
 import { authenticate } from "../shopify.server";
@@ -31,6 +31,14 @@ const URGENT_DAYS = 14;
 // Satış hızı birimi seçilirken sayının bu değerin altına düşmemesi hedeflenir.
 // Böylece "0,8" gibi okunması zor ondalıklar ekrana hiç çıkmaz.
 const RATE_MIN_READABLE = 3;
+
+// Arama kutusu için gecikme. Her tuş vuruşunda değil, kullanıcı durduğunda
+// filtreleme yapılır. Büyük ürün sayısında (1000+) gereksiz yeniden
+// hesaplamaları önlemek için eklendi.
+const SEARCH_DEBOUNCE_MS = 220;
+
+// "Yukarı çık" butonunun belirmesi için gereken kaydırma miktarı (piksel).
+const SCROLL_TOP_THRESHOLD = 400;
 
 type Category = "out" | "soon" | "dead" | "nodata";
 type Filter = "all" | "urgent" | Category;
@@ -75,6 +83,10 @@ const CATEGORY_META: { [K in Category]: CategoryMeta } = {
 };
 
 const CATEGORY_ORDER: Category[] = ["out", "soon", "dead", "nodata"];
+
+// "Tüm ürünler" kartının rengi — herhangi bir kategoriyle çakışmasın diye
+// Shopify'ın standart yeşili kullanıldı.
+const ALL_PRODUCTS_ACCENT = "#008060";
 
 // Sütunlar: Ürün · Durum · Stok · Satış hızı · Ne zaman biter?
 const GRID_COLUMNS =
@@ -158,6 +170,42 @@ const PAGE_CSS = `
   .invf-summary { grid-template-columns: repeat(2, 1fr); gap: 10px; }
 }
 
+/* Basılabilir olduğu belli olsun diye hover'da hafifçe kalkıyor + gölge
+   büyüyor + kenarlık kategori rengine dönüyor. Sayısı 0 olan (tıklanamaz)
+   kartlarda bu efekt bilerek yok.
+   ÖNEMLİ: kartın kendi inline style'ı "all: unset" içeriyor (bkz.
+   SummaryCard). Satır içi stil, önem derecesi (!important) olmayan dış
+   CSS kurallarını HER ZAMAN ezer — pseudo-class fark etmeksizin. Bu
+   yüzden hover'ın gerçekten görünmesi için bu kurallara !important şart.
+   Aynı sebeple: bu sınıf hem kategori kartları hem "Tüm ürünler" kartı
+   (invf-allcard) tarafından paylaşılıyor, tutarlı hover/focus için. */
+.invf-summary-card {
+  transition: transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease !important;
+}
+.invf-summary-card:hover:not(.invf-summary-card--empty) {
+  transform: translateY(-2px) !important;
+  box-shadow: 0 6px 16px rgba(0,0,0,0.12) !important;
+  border-color: var(--invf-card-accent) !important;
+}
+.invf-summary-card:focus-visible:not(.invf-summary-card--empty) {
+  outline: 2px solid var(--invf-card-accent) !important;
+  outline-offset: 2px !important;
+}
+.invf-summary-card--empty { cursor: default; }
+
+/* "Tüm ürünler" kartı: diğerleriyle aynı görsel dil (kart + üst şerit),
+   ama kare değil geniş/yatay. Dar ekranda dikeyleşir — bu yalnızca
+   media query ile mümkün, bu yüzden layout'un flex-direction'ı burada
+   !important ile eziliyor (inline "all: unset" nedeniyle aksi halde
+   üzerine yazılamaz, bkz. yukarıdaki açıklama). */
+@media (max-width: 560px) {
+  .invf-allcard {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 6px !important;
+  }
+}
+
 .invf-hint { font-size: 12.5px; color: #6B6B6B; margin-top: -4px; }
 
 .invf-foot {
@@ -183,14 +231,19 @@ const PAGE_CSS = `
   gap: 12px;
   padding: 18px 20px 14px;
 }
-/* Başlık satırı: solda başlık/özet, sağda süzgeci kaldırma butonu.
-   Buton bilinçli olarak nötr renkte — kategori renginden ayrışması gerekiyor. */
+/* Başlık satırı: solda başlık/özet (süzgeç adı zaten burada yazıyor),
+   sağda eylem butonları (Excel indir / temizle). */
 .invf-toolbar-top {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
+}
+.invf-toolbar-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 .invf-clear-btn {
   all: unset;
@@ -210,6 +263,28 @@ const PAGE_CSS = `
   white-space: nowrap;
 }
 .invf-clear-btn:hover { background: #E3F1DF; }
+/* Excel indir butonu: dolu, Excel'in koyu yeşiline yakın renk. İkon
+   kaldırıldı (küçük boyutta tanınmıyordu); metin kısa tutuldu çünkü
+   hangi ürünleri indirdiği zaten hemen üstteki "Süzgeç: ..." satırında
+   yazıyor — tekrar etmeye gerek yok, tam açıklama title tooltip'inde. */
+.invf-export-btn {
+  all: unset;
+  box-sizing: border-box;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  padding: 9px 16px;
+  border-radius: 9px;
+  border: 1.5px solid #14572E;
+  background: #1F7244;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  color: #FFFFFF;
+  white-space: nowrap;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+}
+.invf-export-btn:hover { background: #195C38; }
 .invf-search { position: relative; }
 .invf-search input {
   box-sizing: border-box;
@@ -327,6 +402,16 @@ const PAGE_CSS = `
   text-align: center;
 }
 
+/* --------------------------- Yukarı çık butonu --------------------------- */
+.invf-scrolltop-btn {
+  transition: transform 150ms ease, box-shadow 150ms ease, background 150ms ease !important;
+}
+.invf-scrolltop-btn:hover {
+  transform: translateY(-3px) scale(1.06) !important;
+  box-shadow: 0 10px 22px rgba(0,0,0,0.28) !important;
+  background: #026B4F !important;
+}
+
 /* ---------------------------------------------------------------------
    Dar ekran (<= 900px): her satır ayrı bir kart.
    --------------------------------------------------------------------- */
@@ -399,7 +484,9 @@ const PAGE_CSS = `
   .invf-row:last-child { margin-bottom: 12px; }
   .invf-toolbar { padding: 12px; }
   .invf-refresh-btn { width: 100%; justify-content: center; }
-  .invf-clear-btn { flex: 1 1 100%; justify-content: center; }
+  .invf-toolbar-actions { flex-direction: column; width: 100%; }
+  .invf-clear-btn, .invf-export-btn { flex: 1 1 100%; justify-content: center; }
+  .invf-scrolltop-btn { bottom: 16px !important; right: 16px !important; }
 }
 `;
 
@@ -464,6 +551,87 @@ function stockoutDateText(days: number): string {
 }
 
 // ---------------------------------------------------------------------------
+// CSV dışa aktarma
+// ---------------------------------------------------------------------------
+// Buton her zaman "o an ekranda görünen (süzülmüş/aranmış) liste"yi indirir.
+// Kategori başına ayrı buton yok — kart tıklayıp süzgeci değiştirmek zaten
+// aynı işi görüyor, buton sadece aktif süzgece göre neyi indireceğine karar
+// veriyor. Sayfalama sadece görünümü etkiler; export her zaman süzülmüş
+// KÜMENİN TAMAMINI indirir (sadece o an açık olan 25 satırı değil).
+// Dosya biçimi CSV'dir (gerçek .xlsx değil) ama Excel'de doğrudan açıldığı
+// için buton metninde "Excel indir" deniyor — mağaza sahibi için tanıdık.
+
+function slugifyFilterName(filter: Filter): string {
+  if (filter === "all") return "tum-urunler";
+  if (filter === "urgent") return "acil-urunler";
+  return CATEGORY_META[filter].label
+    .toLocaleLowerCase("tr-TR")
+    .replace(/ı/g, "i")
+    .replace(/ş/g, "s")
+    .replace(/ğ/g, "g")
+    .replace(/ü/g, "u")
+    .replace(/ö/g, "o")
+    .replace(/ç/g, "c")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+function csvField(value: string): string {
+  if (/[",\n]/.test(value)) {
+    return `"${value.replace(/"/g, '""')}"`;
+  }
+  return value;
+}
+
+// item burada bilinçli olarak `any`: loader'ın döndürdüğü satır tipi bu
+// dosyada zaten hiçbir yerde katı biçimde tanımlanmamış (RunwayCell'deki
+// `String(item.confidence ?? "")` kullanımıyla aynı yaklaşım).
+function runwayCsvText(item: any, category: Category): string {
+  if (category === "out") return "Stok bitti";
+  if (category === "dead") return "Uzun süredir satılmıyor";
+  if (category === "nodata") return "Tahmin için yeterli satış geçmişi yok";
+  const days = item.stockoutInDays;
+  if (days == null) return "—";
+  const rounded = Math.round(days);
+  if (rounded <= 0) return "Bugün bitebilir";
+  return `${rounded} gün sonra (${stockoutDateText(rounded)} civarı)`;
+}
+
+function buildCsv(rows: Array<{ item: any; category: Category }>): string {
+  const headers = ["Ürün", "Varyant", "Durum", "Stok", "Satış Hızı", "Ne Zaman Biter", "Not"];
+  const lines = [headers.map(csvField).join(",")];
+
+  for (const { item, category } of rows) {
+    const note = category === "soon" ? confidenceText(String(item.confidence ?? "")) ?? "" : "";
+    const row = [
+      item.productTitle ?? "",
+      item.variantTitle && item.variantTitle !== "Default Title" ? item.variantTitle : "",
+      CATEGORY_META[category].label,
+      String(item.available ?? ""),
+      rateText(item.dailyRate),
+      runwayCsvText(item, category),
+      note,
+    ];
+    lines.push(row.map(csvField).join(","));
+  }
+
+  return lines.join("\r\n");
+}
+
+function downloadCsv(csv: string, fileName: string) {
+  // Excel'de Türkçe karakterlerin bozulmaması için UTF-8 BOM ekleniyor.
+  const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
+
+// ---------------------------------------------------------------------------
 // Uyarı / durum kutusu
 // ---------------------------------------------------------------------------
 
@@ -514,6 +682,31 @@ function AlertBox(props: AlertBoxProps) {
 }
 
 // ---------------------------------------------------------------------------
+// Kartların ortak üst şeridi
+// ---------------------------------------------------------------------------
+// Bilerek ayrı, bağımsız bir eleman: kartın "border"/"active" durumuyla
+// karışıp kaybolmasın diye. Rengi active durumuna hiç bakmaz, her zaman
+// aynı kalır — sadece "empty" (sayısı 0, tıklanamaz) kartlarda griye döner.
+
+function CardStripe(props: { color: string }) {
+  return (
+    <span
+      aria-hidden="true"
+      style={{
+        position: "absolute",
+        top: 0,
+        left: 0,
+        right: 0,
+        height: 4,
+        background: props.color,
+        borderTopLeftRadius: 12,
+        borderTopRightRadius: 12,
+      }}
+    />
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Özet kartı (tıklanınca listeyi filtreler)
 // ---------------------------------------------------------------------------
 
@@ -529,9 +722,13 @@ function SummaryCard(props: SummaryCardProps) {
   // Sayısı 0 olan kart tıklanınca boş listeye düşürüyordu; tıklanamaz yapıldı.
   const empty = props.count === 0;
 
+  const accentVar = { "--invf-card-accent": meta.accent } as CSSProperties;
+
   const style: CSSProperties = {
     all: "unset",
     boxSizing: "border-box",
+    position: "relative",
+    overflow: "hidden",
     cursor: empty ? "default" : "pointer",
     display: "flex",
     flexDirection: "column",
@@ -540,20 +737,30 @@ function SummaryCard(props: SummaryCardProps) {
     borderRadius: 12,
     background: props.active ? meta.soft : "#FFFFFF",
     border: props.active ? `2px solid ${meta.accent}` : "1px solid #E3E3E3",
-    borderTop: `4px solid ${empty ? "#DCDCDC" : meta.accent}`,
     opacity: empty ? 0.55 : 1,
     fontFamily: "inherit",
     minWidth: 0,
+    ...accentVar,
   };
+
+  const className = [
+    "invf-summary-card",
+    props.active ? "invf-summary-card--active" : "",
+    empty ? "invf-summary-card--empty" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
 
   return (
     <button
       type="button"
+      className={className}
       style={style}
       onClick={empty ? undefined : props.onClick}
       aria-pressed={props.active}
       aria-disabled={empty}
     >
+      <CardStripe color={empty ? "#DCDCDC" : meta.accent} />
       <span style={{ fontSize: 13, fontWeight: 700, color: empty ? "#6B6B6B" : meta.text }}>
         {meta.label}
       </span>
@@ -561,6 +768,62 @@ function SummaryCard(props: SummaryCardProps) {
         {props.count}
       </span>
       <span style={{ fontSize: 12, color: "#5C5C5C", lineHeight: 1.35 }}>{meta.hint}</span>
+    </button>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// "Tüm ürünler" kartı — diğer kartlarla aynı görsel dil, geniş/yatay
+// ---------------------------------------------------------------------------
+
+type AllProductsCardProps = {
+  count: number;
+  showingAll: boolean;
+  onClick: () => void;
+};
+
+function AllProductsCard(props: AllProductsCardProps) {
+  const accentVar = { "--invf-card-accent": ALL_PRODUCTS_ACCENT } as CSSProperties;
+
+  const style: CSSProperties = {
+    all: "unset",
+    boxSizing: "border-box",
+    position: "relative",
+    overflow: "hidden",
+    cursor: "pointer",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    width: "100%",
+    padding: "14px 18px 12px",
+    borderRadius: 12,
+    background: props.showingAll ? "#F1F8F4" : "#FFFFFF",
+    border: props.showingAll ? `2px solid ${ALL_PRODUCTS_ACCENT}` : "1px solid #E3E3E3",
+    fontFamily: "inherit",
+    ...accentVar,
+  };
+
+  return (
+    <button
+      type="button"
+      className="invf-summary-card invf-allcard"
+      style={style}
+      onClick={props.onClick}
+      aria-pressed={props.showingAll}
+    >
+      <CardStripe color={ALL_PRODUCTS_ACCENT} />
+      <div style={{ display: "flex", flexDirection: "column", gap: 1, minWidth: 0 }}>
+        <span style={{ fontSize: 14, fontWeight: 700, color: "#1A1A1A" }}>Tüm ürünler</span>
+        <span style={{ fontSize: 12.5, color: "#6B6B6B" }}>
+          {props.showingAll ? "Şu an bunu görüntülüyorsunuz" : "Süzgeci kaldır, hepsini gör"}
+        </span>
+      </div>
+      {/* Diğer kartlardaki büyük/kalın/siyah sayı stiliyle birebir aynı —
+          önceki sürümde yeşil rozet içindeydi, tutarsız duruyordu. */}
+      <span style={{ fontSize: 30, fontWeight: 700, lineHeight: 1.1, color: "#1A1A1A", flexShrink: 0 }}>
+        {props.count}
+      </span>
     </button>
   );
 }
@@ -725,9 +988,35 @@ export default function Index() {
   const isRefreshing = navigation.state === "loading";
 
   const [filter, setFilter] = useState<Filter>("all");
+  // queryInput: kullanıcının o an yazdığı ham metin (input'a bağlı, gecikmesiz).
+  // query: debounce'dan geçmiş, filtrelemede kullanılan değer.
+  const [queryInput, setQueryInput] = useState("");
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
+  const [showScrollTop, setShowScrollTop] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handle = setTimeout(() => {
+      setQuery(queryInput);
+      setPage(1);
+    }, SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(handle);
+  }, [queryInput]);
+
+  // Belli bir miktar aşağı kaydırılınca "yukarı çık" butonu beliriyor.
+  useEffect(() => {
+    function handleScroll() {
+      setShowScrollTop(window.scrollY > SCROLL_TOP_THRESHOLD);
+    }
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    handleScroll();
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
+
+  function scrollToTop() {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
 
   const refresh = () => navigate("?refresh=1");
 
@@ -776,17 +1065,26 @@ export default function Index() {
 
   function clearFilter() {
     setFilter("all");
+    setQueryInput("");
     setQuery("");
     setPage(1);
   }
 
   function showUrgent() {
     setFilter("urgent");
+    setQueryInput("");
     setQuery("");
     setPage(1);
     setTimeout(() => {
       listRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     }, 50);
+  }
+
+  function handleExport() {
+    const csv = buildCsv(filteredRows);
+    const label = slugifyFilterName(filter);
+    const dateStr = new Date().toISOString().slice(0, 10);
+    downloadCsv(csv, `envanter-${label}-${dateStr}.csv`);
   }
 
   const lastUpdated = new Date(computedAt).toLocaleString("tr-TR", {
@@ -823,275 +1121,357 @@ export default function Index() {
     if (allRows.length > 0) subtitleParts.push("en acil olanlar en üstte");
   }
 
+  // Excel indir butonunun tooltip'inde ne indirdiğini söylemesi için
+  // (buton metninde değil — hemen üstteki subtitle'da zaten yazıyor).
+  const filterContextLabel = (() => {
+    const parts: string[] = [];
+    if (activeFilterLabel) parts.push(activeFilterLabel);
+    if (trimmedQuery) parts.push(`"${trimmedQuery}"`);
+    return parts.length > 0 ? parts.join(" · ") : "Tüm ürünler";
+  })();
+
+  // Köşeye sıkışık durmasın, listeye biraz daha yakın dursun diye sağdan
+  // boşluk 24 yerine 44 — hâlâ sabit (fixed) ama tam köşede değil.
+  const scrollTopButtonStyle: CSSProperties = {
+    all: "unset",
+    boxSizing: "border-box",
+    position: "fixed",
+    bottom: 32,
+    right: 44,
+    zIndex: 40,
+    width: 48,
+    height: 48,
+    borderRadius: 999,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    background: "#008060",
+    color: "#FFFFFF",
+    cursor: "pointer",
+    boxShadow: "0 4px 14px rgba(0,0,0,0.25)",
+  };
+
   return (
-    <s-page heading="Envanter Tahmini">
-      <style>{PAGE_CSS}</style>
+    <>
+      <s-page heading="Envanter Tahmini">
+        <style>{PAGE_CSS}</style>
 
-      <s-stack gap="base">
-        <RefreshBar
-          lastUpdated={lastUpdated}
-          isRefreshing={isRefreshing}
-          justRefreshed={!fromCache}
-          onRefresh={refresh}
-        />
+        <s-stack gap="base">
+          <RefreshBar
+            lastUpdated={lastUpdated}
+            isRefreshing={isRefreshing}
+            justRefreshed={!fromCache}
+            onRefresh={refresh}
+          />
 
-        <div
-          style={{ display: "flex", flexDirection: "column", gap: 14, ...dimStyle(isRefreshing) }}
-        >
-          {/* Acil durum varsa kırmızı uyarı, yoksa sessiz bir onay satırı.
-              Hiçbir şey göstermemek "uygulama çalıştı mı?" sorusunu doğuruyordu. */}
-          {reorderAlerts.length > 0 ? (
-            <AlertBox
-              tone={outOfStock.length > 0 ? "critical" : "warning"}
-              title={`${reorderAlerts.length} ürün için sipariş vakti geldi`}
-              description={alertDescription}
-              actionLabel="Acil ürünleri göster"
-              onAction={showUrgent}
-            />
-          ) : (
-            allRows.length > 0 && (
+          <div
+            style={{ display: "flex", flexDirection: "column", gap: 14, ...dimStyle(isRefreshing) }}
+          >
+            {/* Acil durum varsa kırmızı uyarı, yoksa sessiz bir onay satırı.
+                Hiçbir şey göstermemek "uygulama çalıştı mı?" sorusunu doğuruyordu. */}
+            {reorderAlerts.length > 0 ? (
               <AlertBox
-                tone="success"
-                title="Şu an sipariş verilmesi gereken ürün yok"
-                description={`Hiçbir ürünün stoğu ${URGENT_DAYS} gün içinde bitmiyor.`}
+                tone={outOfStock.length > 0 ? "critical" : "warning"}
+                title={`${reorderAlerts.length} ürün için sipariş vakti geldi`}
+                description={alertDescription}
+                actionLabel="Acil ürünleri göster"
+                onAction={showUrgent}
               />
-            )
-          )}
-
-          <div className="invf-summary">
-            {CATEGORY_ORDER.map((cat) => (
-              <SummaryCard
-                key={cat}
-                category={cat}
-                count={counts[cat]}
-                active={filter === cat}
-                onClick={() => changeFilter(cat)}
-              />
-            ))}
-          </div>
-
-          <span className="invf-hint">
-            Listeyi süzmek için yukarıdaki kartlardan birine dokunun.
-          </span>
-
-          {/* ------------------------- Ürün listesi ------------------------- */}
-          <div className="invf-list-card" ref={listRef}>
-            <div className="invf-toolbar">
-              <div className="invf-toolbar-top">
-                <div style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
-                  <span style={{ fontSize: 16, fontWeight: 700, color: "#1A1A1A" }}>Ürünler</span>
-                  <span style={{ fontSize: 13, color: "#5C5C5C" }}>
-                    {subtitleParts.join(" · ")}
-                  </span>
-                </div>
-
-                {isFiltered && (
-                  <button type="button" className="invf-clear-btn" onClick={clearFilter}>
-                    {`Tüm ürünleri göster (${allRows.length})`}
-                  </button>
-                )}
-              </div>
-
-              <div className="invf-search">
-                <span className="invf-search-icon">🔍</span>
-                <input
-                  type="search"
-                  value={query}
-                  placeholder="Ürün adıyla ara"
-                  aria-label="Ürün ara"
-                  onChange={(e) => {
-                    setQuery(e.target.value);
-                    setPage(1);
-                  }}
+            ) : (
+              allRows.length > 0 && (
+                <AlertBox
+                  tone="success"
+                  title="Şu an sipariş verilmesi gereken ürün yok"
+                  description={`Hiçbir ürünün stoğu ${URGENT_DAYS} gün içinde bitmiyor.`}
                 />
-              </div>
+              )
+            )}
+
+            <div className="invf-summary">
+              {CATEGORY_ORDER.map((cat) => (
+                <SummaryCard
+                  key={cat}
+                  category={cat}
+                  count={counts[cat]}
+                  active={filter === cat}
+                  onClick={() => changeFilter(cat)}
+                />
+              ))}
             </div>
 
-            {pageRows.length > 0 && (
-              <div className="invf-head">
-                <span>Ürün</span>
-                <span>Durum</span>
-                <span>Stok</span>
-                <span>Satış hızı</span>
-                <span>Ne zaman biter?</span>
-              </div>
+            {/* "Tüm ürünler" bilinçli olarak 4'lü kart grid'inin İÇİNDE değil,
+                altında — 5. kart yapmak hem kavramsal karışıklık yaratırdı
+                (kategorilerin toplamı bir kategori değildir) hem de grid'in
+                "asla 3 sütuna düşmez" düzenini bozardı. */}
+            {allRows.length > 0 && (
+              <AllProductsCard
+                count={allRows.length}
+                showingAll={!isFiltered}
+                onClick={clearFilter}
+              />
             )}
 
-            {pageRows.map(({ item, category }) => {
-              const meta = CATEGORY_META[category];
+            <span className="invf-hint">
+              Listeyi süzmek için yukarıdaki kartlardan birine dokunun.
+            </span>
 
-              let runway: ReactNode;
-              if (category === "out") {
-                runway = (
-                  <span style={{ fontSize: 14, fontWeight: 700, color: "#D72C0D" }}>
-                    Stok bitti — hemen sipariş verin
-                  </span>
-                );
-              } else if (category === "soon" && item.stockoutInDays != null) {
-                runway = (
-                  <RunwayCell
-                    days={Math.round(item.stockoutInDays)}
-                    confidence={String(item.confidence ?? "")}
-                  />
-                );
-              } else if (category === "dead") {
-                runway = (
-                  <span style={{ fontSize: 13.5, fontWeight: 600, color: "#1F4C8C" }}>
-                    Uzun süredir satılmıyor
-                  </span>
-                );
-              } else {
-                runway = <span className="invf-muted">Tahmin için yeterli satış geçmişi yok</span>;
-              }
-
-              const showVariant = item.variantTitle && item.variantTitle !== "Default Title";
-              const isOut = item.available <= 0;
-
-              return (
-                <div
-                  className="invf-row"
-                  key={item.variantId}
-                  style={{ borderLeft: `3px solid ${meta.accent}` }}
-                >
-                  <div
-                    className="invf-product"
-                    style={{ display: "flex", alignItems: "center", gap: 11, minWidth: 0 }}
-                  >
-                    <span
-                      style={{
-                        width: 36,
-                        height: 36,
-                        flexShrink: 0,
-                        borderRadius: 9,
-                        display: "inline-flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        fontSize: 12.5,
-                        fontWeight: 700,
-                        color: meta.text,
-                        background: meta.soft,
-                      }}
-                    >
-                      {initials(item.productTitle)}
+            {/* ------------------------- Ürün listesi ------------------------- */}
+            <div className="invf-list-card" ref={listRef}>
+              <div className="invf-toolbar">
+                <div className="invf-toolbar-top">
+                  <div style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
+                    <span style={{ fontSize: 16, fontWeight: 700, color: "#1A1A1A" }}>
+                      Ürünler
                     </span>
-                    <div style={{ display: "flex", flexDirection: "column", gap: 1, minWidth: 0 }}>
-                      <span style={{ fontSize: 14, fontWeight: 600, color: "#1A1A1A" }}>
-                        {item.productTitle}
-                      </span>
-                      {showVariant && (
-                        <span style={{ fontSize: 12.5, fontWeight: 500, color: "#6B6B6B" }}>
-                          {item.variantTitle}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="invf-c-status">
-                    <CellLabel>Durum</CellLabel>
-                    <StatusPill category={category} />
-                  </div>
-
-                  <div className="invf-c-stock">
-                    <CellLabel>Stok</CellLabel>
-                    <span className="invf-num" style={{ color: isOut ? "#D72C0D" : "#1A1A1A" }}>
-                      {item.available}
-                      <small>adet</small>
+                    <span style={{ fontSize: 13, color: "#5C5C5C" }}>
+                      {subtitleParts.join(" · ")}
                     </span>
                   </div>
 
-                  <div className="invf-c-rate">
-                    <CellLabel>Satış hızı</CellLabel>
-                    <span style={{ fontSize: 13.5, fontWeight: 600, color: "#1A1A1A" }}>
-                      {rateText(item.dailyRate)}
-                    </span>
-                  </div>
-
-                  <div className="invf-wide">
-                    <CellLabel>Ne zaman biter?</CellLabel>
-                    {runway}
+                  <div className="invf-toolbar-actions">
+                    {filteredRows.length > 0 && (
+                      <button
+                        type="button"
+                        className="invf-export-btn"
+                        onClick={handleExport}
+                        title={`${filterContextLabel} · ${filteredRows.length} ürünü Excel'de açılabilen bir CSV dosyası olarak indirir.`}
+                      >
+                        {`Excel indir (${filteredRows.length})`}
+                      </button>
+                    )}
+                    {isFiltered && (
+                      <button type="button" className="invf-clear-btn" onClick={clearFilter}>
+                        {`Tüm ürünleri göster (${allRows.length})`}
+                      </button>
+                    )}
                   </div>
                 </div>
-              );
-            })}
 
-            {/* Boş durumun iki ayrı sebebi var, ikisi aynı metni göstermemeli. */}
-            {filteredRows.length === 0 && allRows.length === 0 && (
-              <div className="invf-empty">
-                <span style={{ fontSize: 26 }}>📦</span>
-                <span style={{ fontSize: 15, fontWeight: 700, color: "#1A1A1A" }}>
-                  Gösterilecek ürün yok
-                </span>
-                <span style={{ fontSize: 13, color: "#5C5C5C", maxWidth: 380 }}>
-                  Stok takibi açık bir ürün bulunamadı. Shopify'da ürünlerinizin stok takibinin
-                  açık olduğundan emin olun, sonra verileri yenileyin.
-                </span>
+                <div className="invf-search">
+                  <span className="invf-search-icon">🔍</span>
+                  <input
+                    type="search"
+                    value={queryInput}
+                    placeholder="Ürün adıyla ara"
+                    aria-label="Ürün ara"
+                    onChange={(e) => setQueryInput(e.target.value)}
+                  />
+                </div>
               </div>
-            )}
 
-            {filteredRows.length === 0 && allRows.length > 0 && (
-              <div className="invf-empty">
-                <span style={{ fontSize: 26 }}>🔍</span>
-                <span style={{ fontSize: 15, fontWeight: 700, color: "#1A1A1A" }}>
-                  Bu süzgeçle eşleşen ürün yok
-                </span>
-                <span style={{ fontSize: 13, color: "#5C5C5C" }}>
-                  Aramayı değiştirin ya da tüm ürünlere dönün.
-                </span>
-                <button
-                  type="button"
-                  className="invf-clear-btn"
-                  style={{ marginTop: 6 }}
-                  onClick={clearFilter}
+              {pageRows.length > 0 && (
+                <div className="invf-head">
+                  <span>Ürün</span>
+                  <span>Durum</span>
+                  <span>Stok</span>
+                  <span>Satış hızı</span>
+                  <span>Ne zaman biter?</span>
+                </div>
+              )}
+
+              {pageRows.map(({ item, category }) => {
+                const meta = CATEGORY_META[category];
+
+                let runway: ReactNode;
+                if (category === "out") {
+                  runway = (
+                    <span style={{ fontSize: 14, fontWeight: 700, color: "#D72C0D" }}>
+                      Stok bitti — hemen sipariş verin
+                    </span>
+                  );
+                } else if (category === "soon" && item.stockoutInDays != null) {
+                  runway = (
+                    <RunwayCell
+                      days={Math.round(item.stockoutInDays)}
+                      confidence={String(item.confidence ?? "")}
+                    />
+                  );
+                } else if (category === "dead") {
+                  runway = (
+                    <span style={{ fontSize: 13.5, fontWeight: 600, color: "#1F4C8C" }}>
+                      Uzun süredir satılmıyor
+                    </span>
+                  );
+                } else {
+                  runway = (
+                    <span className="invf-muted">Tahmin için yeterli satış geçmişi yok</span>
+                  );
+                }
+
+                const showVariant = item.variantTitle && item.variantTitle !== "Default Title";
+                const isOut = item.available <= 0;
+
+                return (
+                  <div
+                    className="invf-row"
+                    key={item.variantId}
+                    style={{ borderLeft: `3px solid ${meta.accent}` }}
+                  >
+                    <div
+                      className="invf-product"
+                      style={{ display: "flex", alignItems: "center", gap: 11, minWidth: 0 }}
+                    >
+                      <span
+                        style={{
+                          width: 36,
+                          height: 36,
+                          flexShrink: 0,
+                          borderRadius: 9,
+                          display: "inline-flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          fontSize: 12.5,
+                          fontWeight: 700,
+                          color: meta.text,
+                          background: meta.soft,
+                        }}
+                      >
+                        {initials(item.productTitle)}
+                      </span>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 1, minWidth: 0 }}>
+                        <span style={{ fontSize: 14, fontWeight: 600, color: "#1A1A1A" }}>
+                          {item.productTitle}
+                        </span>
+                        {showVariant && (
+                          <span style={{ fontSize: 12.5, fontWeight: 500, color: "#6B6B6B" }}>
+                            {item.variantTitle}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="invf-c-status">
+                      <CellLabel>Durum</CellLabel>
+                      <StatusPill category={category} />
+                    </div>
+
+                    <div className="invf-c-stock">
+                      <CellLabel>Stok</CellLabel>
+                      <span className="invf-num" style={{ color: isOut ? "#D72C0D" : "#1A1A1A" }}>
+                        {item.available}
+                        <small>adet</small>
+                      </span>
+                    </div>
+
+                    <div className="invf-c-rate">
+                      <CellLabel>Satış hızı</CellLabel>
+                      <span style={{ fontSize: 13.5, fontWeight: 600, color: "#1A1A1A" }}>
+                        {rateText(item.dailyRate)}
+                      </span>
+                    </div>
+
+                    <div className="invf-wide">
+                      <CellLabel>Ne zaman biter?</CellLabel>
+                      {runway}
+                    </div>
+                  </div>
+                );
+              })}
+
+              {/* Boş durumun iki ayrı sebebi var, ikisi aynı metni göstermemeli. */}
+              {filteredRows.length === 0 && allRows.length === 0 && (
+                <div className="invf-empty">
+                  <span style={{ fontSize: 26 }}>📦</span>
+                  <span style={{ fontSize: 15, fontWeight: 700, color: "#1A1A1A" }}>
+                    Gösterilecek ürün yok
+                  </span>
+                  <span style={{ fontSize: 13, color: "#5C5C5C", maxWidth: 380 }}>
+                    Stok takibi açık bir ürün bulunamadı. Shopify'da ürünlerinizin stok takibinin
+                    açık olduğundan emin olun, sonra verileri yenileyin.
+                  </span>
+                </div>
+              )}
+
+              {filteredRows.length === 0 && allRows.length > 0 && (
+                <div className="invf-empty">
+                  <span style={{ fontSize: 26 }}>🔍</span>
+                  <span style={{ fontSize: 15, fontWeight: 700, color: "#1A1A1A" }}>
+                    Bu süzgeçle eşleşen ürün yok
+                  </span>
+                  <span style={{ fontSize: 13, color: "#5C5C5C" }}>
+                    Aramayı değiştirin ya da tüm ürünlere dönün.
+                  </span>
+                  <button
+                    type="button"
+                    className="invf-clear-btn"
+                    style={{ marginTop: 6 }}
+                    onClick={clearFilter}
+                  >
+                    {`Tüm ürünleri göster (${allRows.length})`}
+                  </button>
+                </div>
+              )}
+
+              {filteredRows.length > PAGE_SIZE && (
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: 12,
+                    padding: "13px 18px",
+                    borderTop: "1px solid #EBEBEB",
+                  }}
                 >
-                  {`Tüm ürünleri göster (${allRows.length})`}
-                </button>
-              </div>
-            )}
+                  <button
+                    type="button"
+                    className="invf-pagebtn"
+                    disabled={currentPage <= 1}
+                    onClick={() => setPage(currentPage - 1)}
+                  >
+                    ← Önceki
+                  </button>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: "#303030" }}>
+                    {`Sayfa ${currentPage} / ${totalPages}`}
+                  </span>
+                  <button
+                    type="button"
+                    className="invf-pagebtn"
+                    disabled={currentPage >= totalPages}
+                    onClick={() => setPage(currentPage + 1)}
+                  >
+                    Sonraki →
+                  </button>
+                </div>
+              )}
 
-            {filteredRows.length > PAGE_SIZE && (
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  gap: 12,
-                  padding: "13px 18px",
-                  borderTop: "1px solid #EBEBEB",
-                }}
-              >
-                <button
-                  type="button"
-                  className="invf-pagebtn"
-                  disabled={currentPage <= 1}
-                  onClick={() => setPage(currentPage - 1)}
-                >
-                  ← Önceki
-                </button>
-                <span style={{ fontSize: 13, fontWeight: 600, color: "#303030" }}>
-                  {`Sayfa ${currentPage} / ${totalPages}`}
-                </span>
-                <button
-                  type="button"
-                  className="invf-pagebtn"
-                  disabled={currentPage >= totalPages}
-                  onClick={() => setPage(currentPage + 1)}
-                >
-                  Sonraki →
-                </button>
-              </div>
-            )}
-
-            {allRows.length > 0 && (
-              <div className="invf-foot">
-                Satış hızı, son 7 / 30 / 90 günlük satışlarınızın ağırlıklı ortalamasıdır. Birim
-                ürünün hızına göre değişir: hızlı satanlarda günlük, yavaş satanlarda aylık
-                gösterilir.
-              </div>
-            )}
+              {allRows.length > 0 && (
+                <div className="invf-foot">
+                  Satış hızı, son 7 / 30 / 90 günlük satışlarınızın ağırlıklı ortalamasıdır. Birim
+                  ürünün hızına göre değişir: hızlı satanlarda günlük, yavaş satanlarda aylık
+                  gösterilir.
+                </div>
+              )}
+            </div>
           </div>
-        </div>
-      </s-stack>
-    </s-page>
+        </s-stack>
+      </s-page>
+
+      {/* s-page'in DIŞINDA render ediliyor ki position:fixed gerçekten
+          tarayıcı penceresine göre sabitlensin (bir Polaris web bileşeni
+          içeride transform kullanırsa fixed, viewport yerine ona göre
+          sabitlenebilir). */}
+      {showScrollTop && (
+        <button
+          type="button"
+          className="invf-scrolltop-btn"
+          style={scrollTopButtonStyle}
+          onClick={scrollToTop}
+          aria-label="Sayfanın başına dön"
+          title="Yukarı çık"
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path
+              d="M12 19V5M12 5L6 11M12 5L18 11"
+              stroke="#FFFFFF"
+              strokeWidth="2.4"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </button>
+      )}
+    </>
   );
 }
 
