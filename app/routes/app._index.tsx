@@ -358,6 +358,14 @@ const PAGE_CSS = `
 .invf-row:hover { background: #FBFCFC; }
 .invf-label { display: none; }
 
+/* Ürün adı artık gerçek Shopify ürün sayfasına link — mağaza sahibi ürünü
+   ismine güvenmeden (fotoğrafına bakarak) tanıyabilsin, tıklayınca da
+   doğrudan o ürünün admin sayfasına gitsin diye eklendi. Hover'da başlık
+   altı çizili oluyor ki tıklanabilir olduğu belli olsun. */
+.invf-product { cursor: pointer; }
+.invf-product:hover .invf-product-title { text-decoration: underline; }
+.invf-product:focus-visible { outline: 2px solid #008060; outline-offset: 2px; border-radius: 6px; }
+
 .invf-num {
   font-size: 16px;
   font-weight: 700;
@@ -549,6 +557,15 @@ function initials(title: string): string {
     .filter((w) => w.length > 0 && !["the", "a", "an"].includes(w.toLowerCase()));
   const letters = words.slice(0, 2).map((w) => w[0]?.toUpperCase() ?? "");
   return letters.join("") || "?";
+}
+
+// Shopify'ın GraphQL ID'leri her zaman "gid://shopify/Product/123456789" formatında.
+// Admin'in "shopify://admin/products/{id}" navigasyon protokolü ise SADECE sayısal
+// ID'yi bekliyor — bu yüzden GID'in son "/" sonrasını ayıklıyoruz. Format hiç
+// değişmediği için bu her zaman güvenilir (Shopify'ın kendi GID şemasının bir parçası).
+function productAdminId(gid: string): string {
+  const idx = gid.lastIndexOf("/");
+  return idx === -1 ? gid : gid.slice(idx + 1);
 }
 
 /**
@@ -1390,29 +1407,64 @@ export default function Index() {
                     key={item.variantId}
                     style={{ borderLeft: `3px solid ${meta.accent}` }}
                   >
-                    <div
+                    {/* Gerçek Shopify ürün sayfasına link. "shopify://" App Bridge'in
+                        kendi navigasyon protokolü — düz <a href="/..."> DEĞİL, bu
+                        yüzden "kendi rotalarımız için Link kullan" kuralının dışında:
+                        uygulamamızın dışına, Shopify'ın native sayfasına çıkıyor.
+                        target="_top" şart, aksi halde iframe içinde açmayı dener. */}
+                    <a
                       className="invf-product"
-                      style={{ display: "flex", alignItems: "center", gap: 11, minWidth: 0 }}
+                      href={`shopify://admin/products/${productAdminId(item.productId)}`}
+                      target="_top"
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 11,
+                        minWidth: 0,
+                        textDecoration: "none",
+                        color: "inherit",
+                      }}
                     >
-                      <span
-                        style={{
-                          width: 36,
-                          height: 36,
-                          flexShrink: 0,
-                          borderRadius: 9,
-                          display: "inline-flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          fontSize: 12.5,
-                          fontWeight: 700,
-                          color: meta.text,
-                          background: meta.soft,
-                        }}
-                      >
-                        {initials(item.productTitle)}
-                      </span>
+                      {item.imageUrl ? (
+                        <img
+                          src={item.imageUrl}
+                          alt=""
+                          width={36}
+                          height={36}
+                          loading="lazy"
+                          style={{
+                            width: 36,
+                            height: 36,
+                            flexShrink: 0,
+                            borderRadius: 9,
+                            objectFit: "cover",
+                            background: meta.soft,
+                          }}
+                        />
+                      ) : (
+                        <span
+                          style={{
+                            width: 36,
+                            height: 36,
+                            flexShrink: 0,
+                            borderRadius: 9,
+                            display: "inline-flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            fontSize: 12.5,
+                            fontWeight: 700,
+                            color: meta.text,
+                            background: meta.soft,
+                          }}
+                        >
+                          {initials(item.productTitle)}
+                        </span>
+                      )}
                       <div style={{ display: "flex", flexDirection: "column", gap: 1, minWidth: 0 }}>
-                        <span style={{ fontSize: 14, fontWeight: 600, color: "#1A1A1A" }}>
+                        <span
+                          className="invf-product-title"
+                          style={{ fontSize: 14, fontWeight: 600, color: "#1A1A1A" }}
+                        >
                           {item.productTitle}
                         </span>
                         {showVariant && (
@@ -1421,7 +1473,7 @@ export default function Index() {
                           </span>
                         )}
                       </div>
-                    </div>
+                    </a>
 
                     <div className="invf-c-status">
                       <CellLabel>{t.colStatus}</CellLabel>

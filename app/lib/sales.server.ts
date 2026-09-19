@@ -3,6 +3,7 @@
 //   1) isGiftCard alanı
 //   2) Mağaza saat dilimine göre gün hesaplama (UTC yerine)
 //   3) logSnapshot lokasyon toplama bug fix
+// YENİ (Ürün fotoğrafı + ürün sayfası linki): featuredImage.url eklendi.
 
 type Admin = {
     graphql: (
@@ -19,6 +20,7 @@ export type VariantInfo = {
     status: string; // ACTIVE | DRAFT | ARCHIVED
     tracked: boolean;
     isGiftCard: boolean; // <-- YENİ (Adım 5)
+    imageUrl: string | null; // <-- YENİ: ürünün öne çıkan görseli, yoksa null
     available: number; // tüm lokasyonların toplamı
     byLocation: Record<string, number>;
     levelsTruncated: boolean;
@@ -61,7 +63,7 @@ const VARIANTS_QUERY = `#graphql
       nodes {
         id
         title
-        product { id title status isGiftCard }
+        product { id title status isGiftCard featuredImage { url } }
         inventoryItem {
           tracked
           inventoryLevels(first: 10) {
@@ -168,6 +170,7 @@ export async function fetchSalesSnapshot(admin: Admin, days = 365): Promise<Sale
                 status: v.product.status,
                 tracked: v.inventoryItem?.tracked ?? false,
                 isGiftCard: v.product.isGiftCard ?? false, // <-- YENİ (Adım 5)
+                imageUrl: v.product.featuredImage?.url ?? null, // <-- YENİ
                 available,
                 byLocation,
                 levelsTruncated: levels?.pageInfo?.hasNextPage ?? false,
