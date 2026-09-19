@@ -1,4 +1,4 @@
-import type { CSSProperties, FormEvent } from "react";
+import type { FormEvent } from "react";
 import { useEffect, useState } from "react";
 
 // ---------------------------------------------------------------------------
@@ -13,28 +13,65 @@ const WEB3FORMS_ACCESS_KEY = "acbd6a73-2595-421a-ba12-c7f08c5b655f";
 
 type Status = "idle" | "sending" | "success" | "error";
 
+// Shopify Admin arayüzü Inter fontunu kullanıyor (Polaris'in kendi tasarım
+// sistemi). Bu bileşen artık <s-page> DIŞINDA render edildiği için o
+// mirası almıyor — miras almaya güvenmek yerine burada açıkça tanımlıyoruz,
+// aksi halde tarayıcı varsayılan sistem fontuna düşüyor (görünüşte belirgin
+// bir kalite kaybı). Fallback zinciri Inter yüklenmezse de admin arayüzüyle
+// tutarlı bir görünüm sağlasın diye standart sistem fontu sırasını izliyor.
+const INVF_FB_FONT_STACK =
+  "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif";
+
 const FEEDBACK_CSS = `
+/* Tetikleyici buton: sol alt köşede sabit/yüzen. "Yukarı çık" butonuyla
+   aynı katmanda (z-index 40) ama karşı köşede — çakışmıyor. Sabit
+   konumlandığı için bu bileşen <s-page> DIŞINDA, app._index.tsx içinde
+   kardeş eleman olarak render edilmeli (aksi halde Polaris'in s-page
+   bileşeni transform kullanıyorsa fixed, viewport yerine ona göre
+   sabitlenebilir). */
 .invf-fb-trigger {
   all: unset;
   box-sizing: border-box;
+  position: fixed;
+  bottom: 32px;
+  left: 44px;
+  z-index: 40;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 11px 20px;
-  border-radius: 10px;
+  padding: 12px 20px;
+  border-radius: 999px;
   border: 1px solid #D4D4D4;
   background: #FFFFFF;
-  font: inherit;
+  font-family: ${INVF_FB_FONT_STACK};
   font-size: 13.5px;
   font-weight: 600;
   color: #1A1A1A;
-  transition: background 150ms ease, border-color 150ms ease, transform 150ms ease !important;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.18);
+  transition: background 150ms ease, border-color 150ms ease, transform 150ms ease, box-shadow 150ms ease !important;
 }
 .invf-fb-trigger:hover {
   background: #F7F7F7 !important;
   border-color: #008060 !important;
-  transform: translateY(-1px) !important;
+  transform: translateY(-2px) !important;
+  box-shadow: 0 8px 20px rgba(0,0,0,0.22) !important;
+}
+
+@media (max-width: 560px) {
+  .invf-fb-trigger {
+    bottom: calc(16px + env(safe-area-inset-bottom, 0px)) !important;
+    left: 16px !important;
+    /* Metin dar ekranda son ürün kartının üzerine taşıp okunamaz hale
+       geliyordu; mobilde "yukarı çık" butonuyla simetrik, sade bir
+       daire ikona dönüşüyor. Erişilebilirlik için aria-label korunuyor,
+       sadece görsel etiket gizleniyor. */
+    width: 48px !important;
+    height: 48px !important;
+    padding: 0 !important;
+    justify-content: center !important;
+  }
+  .invf-fb-label { display: none; }
 }
 
 .invf-fb-overlay {
@@ -46,6 +83,11 @@ const FEEDBACK_CSS = `
   justify-content: center;
   padding: 20px;
   z-index: 100;
+  /* Panel içindeki tüm elemanlar (başlık, label, input, textarea, buton)
+     "font: inherit" / "font: inherit" varyantları kullanıyor; bu yüzden
+     Inter'i burada, en üst ortak atada tanımlamak yeterli — tek tek her
+     elemana yazmaya gerek yok. */
+  font-family: ${INVF_FB_FONT_STACK};
 }
 
 .invf-fb-panel {
@@ -139,6 +181,16 @@ export function FeedbackButton() {
     return () => window.removeEventListener("keydown", handleKey);
   }, [open]);
 
+  // Modal açıkken arka plandaki sayfanın kaymasını (scroll) engelle.
+  useEffect(() => {
+    if (!open) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [open]);
+
   function closeAndReset() {
     setOpen(false);
     // Başarılıysa formu temizle; hataysa kullanıcı tekrar denesin diye
@@ -176,21 +228,23 @@ export function FeedbackButton() {
     }
   }
 
-  const overlayStyle: CSSProperties = { all: "unset" };
-
   return (
     <>
       <style>{FEEDBACK_CSS}</style>
 
-      <button type="button" className="invf-fb-trigger" onClick={() => setOpen(true)}>
+      <button
+        type="button"
+        className="invf-fb-trigger"
+        onClick={() => setOpen(true)}
+        aria-label="Geri bildirim"
+      >
         <span aria-hidden="true">💬</span>
-        Görüş, öneri ya da sorun bildir
+        <span className="invf-fb-label">Geri bildirim</span>
       </button>
 
       {open && (
         <div
           className="invf-fb-overlay"
-          style={overlayStyle}
           onClick={(e) => {
             if (e.target === e.currentTarget) closeAndReset();
           }}
