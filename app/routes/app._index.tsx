@@ -2,6 +2,7 @@ import type { CSSProperties, ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { HeadersFunction, LoaderFunctionArgs } from "react-router";
 import { useLoaderData, useNavigate, useNavigation } from "react-router";
+import * as XLSX from "xlsx";
 import { authenticate } from "../shopify.server";
 import { getForecastGroups } from "../lib/forecastCache.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
@@ -435,17 +436,22 @@ const PAGE_CSS = `
   .invf-head { display: none; }
 
   .invf-row {
-    grid-template-columns: 1fr 1fr;
+    /* Durum rozeti artık ürün satırının SAĞINDA, ayrı bir satır değil —
+       önceki tasarımda her kart 4 ayrı dikey blok (ürün / durum / stok+
+       hız / bitiş) olduğu için gereksiz uzundu, ürünler arası kaydırma
+       çok fazlaydı. "status" alanı artık "product" ile aynı grid satırında,
+       sağda dar bir sütunda duruyor — kartın toplam yüksekliği belirgin
+       şekilde azalıyor. */
+    grid-template-columns: 1fr auto;
     grid-template-areas:
-      "product product"
-      "status  status"
+      "product status"
       "stock   rate"
       "runway  runway";
     column-gap: 10px;
-    row-gap: 12px;
+    row-gap: 8px;
     align-items: stretch;
-    padding: 14px;
-    margin: 0 14px 12px;
+    padding: 12px;
+    margin: 0 14px 8px;
     border: 1px solid #ECECEC;
     border-radius: 12px;
     background: #FFFFFF;
@@ -454,8 +460,12 @@ const PAGE_CSS = `
   .invf-row:last-child { margin-bottom: 14px; }
   .invf-row:hover { background: #FFFFFF; }
 
-  .invf-product { grid-area: product; }
-  .invf-c-status { grid-area: status; }
+  .invf-product { grid-area: product; min-width: 0; }
+  .invf-c-status {
+    grid-area: status;
+    align-self: start;
+    justify-self: end;
+  }
   .invf-c-stock  { grid-area: stock; }
   .invf-c-rate   { grid-area: rate; }
   .invf-wide     { grid-area: runway; }
@@ -466,13 +476,12 @@ const PAGE_CSS = `
     display: flex;
     flex-direction: column;
     justify-content: center;
-    gap: 3px;
+    gap: 2px;
     min-width: 0;
-    min-height: 62px;
     background: #FAFBFB;
     border: 1px solid #F0F0F0;
-    border-radius: 10px;
-    padding: 9px 11px;
+    border-radius: 9px;
+    padding: 7px 10px;
   }
 
   .invf-wide { padding-top: 2px; border-top: 1px dashed #EDEDED; }
@@ -496,7 +505,7 @@ const PAGE_CSS = `
 
 @media (max-width: 560px) {
   .invf-summary { gap: 8px; }
-  .invf-row { margin: 0 10px 10px; padding: 13px; }
+  .invf-row { margin: 0 10px 8px; padding: 11px; }
   .invf-row:last-child { margin-bottom: 12px; }
   .invf-toolbar { padding: 12px; }
   .invf-refresh-btn { width: 100%; justify-content: center; }
@@ -589,15 +598,24 @@ function stockoutDateText(days: number, locale: Locale): string {
 }
 
 // ---------------------------------------------------------------------------
-// CSV dışa aktarma
+// Excel (.xlsx) dışa aktarma
 // ---------------------------------------------------------------------------
 // Buton her zaman "o an ekranda görünen (süzülmüş/aranmış) liste"yi indirir.
 // Kategori başına ayrı buton yok — kart tıklayıp süzgeci değiştirmek zaten
 // aynı işi görüyor, buton sadece aktif süzgece göre neyi indireceğine karar
 // veriyor. Sayfalama sadece görünümü etkiler; export her zaman süzülmüş
 // KÜMENİN TAMAMINI indirir (sadece o an açık olan 25 satırı değil).
-// Dosya biçimi CSV'dir (gerçek .xlsx değil) ama Excel'de doğrudan açıldığı
-// için buton metninde "Excel indir" deniyor — mağaza sahibi için tanıdık.
+//
+// ÖNEMLİ (v11 sonrası karar değişikliği): Başlangıçta bu, "Excel'de
+// açılabilen CSV" idi (gerçek .xlsx değil) — basit ve bağımlılıksız
+// olduğu için bilinçli bir tercihti. Ancak mobil cihazlardaki genel
+// dosya görüntüleyiciler CSV'nin virgülle ayrıldığını her zaman doğru
+// algılayamıyor (tüm satırı tek hücreye tıkıştırabiliyor) — bu da
+// "bozuk" bir çıktı izlenimi veriyordu. Kalıcı çözüm: SheetJS (`xlsx`
+// paketi) ile GERÇEK bir .xlsx dosyası üretmek. Bu, herhangi bir
+// virgül/locale belirsizliği taşımıyor — Excel, Google Sheets, telefon
+// görüntüleyicisi, ne açarsa açsın sütunlar her zaman doğru ayrılmış
+// geliyor. `npm install xlsx` ile eklendi.
 
 function slugifyFilterName(filter: Filter, t: Dictionary, categoryMeta: CategoryMetaMap): string {
   if (filter === "all") return t.filenameAllProducts;
@@ -616,16 +634,11 @@ function slugifyFilterName(filter: Filter, t: Dictionary, categoryMeta: Category
     .replace(/^-+|-+$/g, "");
 }
 
-function csvField(value: string): string {
-  if (/[",\n]/.test(value)) {
-    return `"${value.replace(/"/g, '""')}"`;
-  }
-  return value;
-}
-
 // item burada bilinçli olarak `any`: loader'ın döndürdüğü satır tipi bu
 // dosyada zaten hiçbir yerde katı biçimde tanımlanmamış (RunwayCell'deki
 // `String(item.confidence ?? "")` kullanımıyla aynı yaklaşım).
+// Fonksiyon adı "Csv" ile başlıyor ama artık xlsx için de kullanılıyor —
+// isim tarihsel, davranış (bitiş metnini üretmek) format'tan bağımsız.
 function runwayCsvText(item: any, category: Category, t: Dictionary, locale: Locale): string {
   if (category === "out") return t.csvOut;
   if (category === "dead") return t.csvDead;
@@ -637,42 +650,44 @@ function runwayCsvText(item: any, category: Category, t: Dictionary, locale: Loc
   return t.csvDaysLater(rounded, stockoutDateText(rounded, locale));
 }
 
-function buildCsv(
+// Sözlükteki `csvHeaders`/`csvOut` gibi alan adları tarihsel (bkz. yukarı) —
+// bu satırlar artık .xlsx dosyasının satırları, gerçek CSV metni değil.
+function buildExportRows(
   rows: Array<{ item: any; category: Category }>,
   t: Dictionary,
   locale: Locale,
   categoryMeta: CategoryMetaMap,
-): string {
-  const lines = [t.csvHeaders.map(csvField).join(",")];
+): (string | number)[][] {
+  const data: (string | number)[][] = [t.csvHeaders];
 
   for (const { item, category } of rows) {
     const note = category === "soon" ? confidenceText(String(item.confidence ?? ""), t) ?? "" : "";
-    const row = [
+    data.push([
       item.productTitle ?? "",
       item.variantTitle && item.variantTitle !== "Default Title" ? item.variantTitle : "",
       categoryMeta[category].label,
-      String(item.available ?? ""),
+      item.available ?? "",
       rateText(item.dailyRate, t),
       runwayCsvText(item, category, t, locale),
       note,
-    ];
-    lines.push(row.map(csvField).join(","));
+    ]);
   }
 
-  return lines.join("\r\n");
+  return data;
 }
 
-function downloadCsv(csv: string, fileName: string) {
-  // Excel'de Türkçe karakterlerin bozulmaması için UTF-8 BOM ekleniyor.
-  const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = fileName;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
+// Sütun genişlikleri sabit — "Ürün" ve "Not" en uzun içerikli sütunlar
+// olduğu için biraz daha geniş, "Stok" tek haneli/iki haneli sayılar
+// içerdiği için dar. Sıra buildExportRows'taki sütun sırasıyla birebir
+// eşleşmeli.
+const EXPORT_COLUMN_WIDTHS = [{ wch: 28 }, { wch: 16 }, { wch: 14 }, { wch: 8 }, { wch: 16 }, { wch: 28 }, { wch: 32 }];
+
+function downloadXlsx(rows: (string | number)[][], fileName: string) {
+  const worksheet = XLSX.utils.aoa_to_sheet(rows);
+  worksheet["!cols"] = EXPORT_COLUMN_WIDTHS;
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, "Inventory");
+  XLSX.writeFile(workbook, fileName);
 }
 
 // ---------------------------------------------------------------------------
@@ -1112,9 +1127,20 @@ export default function Index() {
   const currentPage = Math.min(page, totalPages);
   const pageRows = filteredRows.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
+  // Kart/filtre değişince listeye otomatik kayıyor — mobilde özet kartları +
+  // uyarı kutusu sayfanın büyük kısmını kapladığı için, önceden sadece
+  // "Acil ürünleri göster" butonunda olan bu davranış artık TÜM filtre
+  // değişikliklerinde geçerli (kategori kartına dokunmak da dahil).
+  function scrollToList() {
+    setTimeout(() => {
+      listRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 50);
+  }
+
   function changeFilter(next: Filter) {
     setFilter((prev) => (prev === next ? "all" : next));
     setPage(1);
+    scrollToList();
   }
 
   function clearFilter() {
@@ -1122,6 +1148,7 @@ export default function Index() {
     setQueryInput("");
     setQuery("");
     setPage(1);
+    scrollToList();
   }
 
   function showUrgent() {
@@ -1129,16 +1156,14 @@ export default function Index() {
     setQueryInput("");
     setQuery("");
     setPage(1);
-    setTimeout(() => {
-      listRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-    }, 50);
+    scrollToList();
   }
 
   function handleExport() {
-    const csv = buildCsv(filteredRows, t, locale, categoryMeta);
+    const rows = buildExportRows(filteredRows, t, locale, categoryMeta);
     const label = slugifyFilterName(filter, t, categoryMeta);
     const dateStr = new Date().toISOString().slice(0, 10);
-    downloadCsv(csv, `${t.filenamePrefix}-${label}-${dateStr}.csv`);
+    downloadXlsx(rows, `${t.filenamePrefix}-${label}-${dateStr}.xlsx`);
   }
 
   const lastUpdated = new Date(computedAt).toLocaleString(intlLocale(locale), {
