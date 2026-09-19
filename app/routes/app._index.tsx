@@ -553,10 +553,16 @@ function rateText(dailyRate: number | null | undefined): string {
 }
 
 // "Güven" teknik bir terim; düz cümleye çeviriyoruz.
+// forecast.ts'teki Confidence tipiyle birebir eşleşir: "normal" | "low" | "insufficient".
+// confidence "insufficient" olduğunda forecast.ts method'u "insufficient_data" yapıyor,
+// forecastCache.server.ts da tam bu method'a göre ürünleri ayrı bir kategoriye
+// ("Tahmin yok") ayırıyor — yani bu fonksiyona hiç ulaşmıyorlar.
+// "normal" (yeterli veri) için bilerek hiçbir not göstermiyoruz — not yoksa
+// "güvenilir" demek, sadece "low" (az veri) durumunda uyarı çıkıyor. Bu,
+// sektördeki iyi pratikle örtüşüyor: yeni/az verili ürünler ayrı işaretlenir,
+// güvenilir tahminler ekstra bir rozetle kalabalıklaştırılmaz.
 function confidenceText(value: string): string | null {
   if (value === "low") return "Kaba tahmin — satış geçmişi az";
-  if (value === "medium") return "Tahmin yaklaşık";
-  if (value === "high") return "Tahmin güvenilir";
   return null;
 }
 
