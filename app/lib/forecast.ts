@@ -23,6 +23,7 @@ export type VariantForecast = {
     dailyRate: number | null; // günlük satış hızı (birim/gün), one-off ayıklandıktan sonra
     available: number;
     method: string; // ör. "weighted_average" — kullanıcıya dürüstçe gösterilecek (Bölüm 15)
+    imageUrl: string | null; // <-- YENİ: ürünün öne çıkan görseli, yoksa null
 };
 
 export type ForecastResult = {
@@ -172,6 +173,7 @@ export function computeForecast(snapshot: SalesSnapshot, now: Date = new Date())
             dailyRate,
             available: v.available,
             method,
+            imageUrl: v.imageUrl, // <-- YENİ
         });
     }
 
