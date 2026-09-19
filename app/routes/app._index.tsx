@@ -413,13 +413,6 @@ const PAGE_CSS = `
   background: #026B4F !important;
 }
 
-/* ------------------------------ Alt bölüm ------------------------------ */
-.invf-page-footer {
-  display: flex;
-  justify-content: center;
-  padding: 8px 0 4px;
-}
-
 /* ---------------------------------------------------------------------
    Dar ekran (<= 900px): her satır ayrı bir kart.
    --------------------------------------------------------------------- */
@@ -494,7 +487,23 @@ const PAGE_CSS = `
   .invf-refresh-btn { width: 100%; justify-content: center; }
   .invf-toolbar-actions { flex-direction: column; width: 100%; }
   .invf-clear-btn, .invf-export-btn { flex: 1 1 100%; justify-content: center; }
-  .invf-scrolltop-btn { bottom: 16px !important; right: 16px !important; }
+  .invf-scrolltop-btn {
+    bottom: calc(16px + env(safe-area-inset-bottom, 0px)) !important;
+    right: 16px !important;
+  }
+}
+
+/* ------------------------------ Alt boşluk ------------------------------ */
+/* Sayfanın en altı için: sol altta geri bildirim, sağ altta (kaydırınca)
+   yukarı çık butonu sabit duruyor. Bu boşluk olmadan, sayfa sonuna kadar
+   kaydırıldığında son ürün kartı bu butonların altında kalıp
+   okunamıyordu. Mobilde butonlar ekrana daha yakın durduğu için pay
+   biraz daha artırılıyor. */
+.invf-page-content {
+  padding-bottom: 88px;
+}
+@media (max-width: 560px) {
+  .invf-page-content { padding-bottom: 104px; }
 }
 `;
 
@@ -654,11 +663,11 @@ type AlertBoxProps = {
 };
 
 const ALERT_TONES: { [K in AlertTone]: { accent: string; soft: string; text: string; icon: string } } =
-  {
-    critical: { accent: "#D72C0D", soft: "#FFF1F0", text: "#8E1F0B", icon: "!" },
-    warning: { accent: "#B98900", soft: "#FFF8E8", text: "#6B4700", icon: "!" },
-    success: { accent: "#008060", soft: "#F1F8F4", text: "#0C5132", icon: "✓" },
-  };
+{
+  critical: { accent: "#D72C0D", soft: "#FFF1F0", text: "#8E1F0B", icon: "!" },
+  warning: { accent: "#B98900", soft: "#FFF8E8", text: "#6B4700", icon: "!" },
+  success: { accent: "#008060", soft: "#F1F8F4", text: "#0C5132", icon: "✓" },
+};
 
 function AlertBox(props: AlertBoxProps) {
   const tone = ALERT_TONES[props.tone];
@@ -1173,6 +1182,7 @@ export default function Index() {
           />
 
           <div
+            className="invf-page-content"
             style={{ display: "flex", flexDirection: "column", gap: 14, ...dimStyle(isRefreshing) }}
           >
             {/* Acil durum varsa kırmızı uyarı, yoksa sessiz bir onay satırı.
@@ -1451,14 +1461,6 @@ export default function Index() {
                 </div>
               )}
             </div>
-
-            {/* Geri bildirim: sayfanın en altında, sade bir buton. Ayrı bir
-                bileşen dosyasında (app/components/FeedbackButton.tsx) —
-                bu dosya zaten büyük, yeni bileşenleri ayırmaya başlamak
-                Faz 6 öncesi temizlik listesindeki maddeyle de örtüşüyor. */}
-            <div className="invf-page-footer">
-              <FeedbackButton />
-            </div>
           </div>
         </s-stack>
       </s-page>
@@ -1466,7 +1468,14 @@ export default function Index() {
       {/* s-page'in DIŞINDA render ediliyor ki position:fixed gerçekten
           tarayıcı penceresine göre sabitlensin (bir Polaris web bileşeni
           içeride transform kullanırsa fixed, viewport yerine ona göre
-          sabitlenebilir). */}
+          sabitlenebilir). Bu yüzden hem "yukarı çık" hem "geri bildirim"
+          butonu burada, s-page'e kardeş eleman olarak duruyor. */}
+
+      {/* Geri bildirim: sol altta sabit/yüzen, sayfanın her yerinden
+          scroll etmeden erişilebilir. Kendi konumunu ve stilini kendi
+          bileşen dosyasında (FeedbackButton.tsx) taşıyor. */}
+      <FeedbackButton />
+
       {showScrollTop && (
         <button
           type="button"
