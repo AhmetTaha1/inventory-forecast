@@ -6,6 +6,7 @@ import { authenticate } from "../shopify.server";
 import { getForecastGroups } from "../lib/forecastCache.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { FeedbackButton } from "../components/FeedbackButton";
+import { resolveLocale, intlLocale, getDictionary, type Locale, type Dictionary } from "../lib/translations";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, session } = await authenticate.admin(request);
@@ -13,11 +14,17 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const url = new URL(request.url);
   const forceRefresh = url.searchParams.get("refresh") === "1";
 
+  // Shopify, embedded admin uygulamalarının URL'sine mağaza sahibinin admin
+  // panelinde kullandığı dili otomatik olarak `locale` query parametresi
+  // olarak ekliyor (örn. ?locale=tr, ?locale=de). Faz A: sadece Türkçe
+  // çevrildi, başka her dil İngilizce'ye düşüyor (bkz. translations.ts).
+  const locale = resolveLocale(url.searchParams.get("locale"));
+
   const { groups, computedAt, fromCache } = await getForecastGroups(session.shop, admin, {
     forceRefresh,
   });
 
-  return { ...groups, computedAt: computedAt.toISOString(), fromCache };
+  return { ...groups, computedAt: computedAt.toISOString(), fromCache, locale };
 };
 
 // ---------------------------------------------------------------------------
@@ -52,36 +59,44 @@ type CategoryMeta = {
   text: string;
 };
 
-const CATEGORY_META: { [K in Category]: CategoryMeta } = {
-  out: {
-    label: "Stok bitti",
-    hint: "Şu an satılamıyor",
-    accent: "#D72C0D",
-    soft: "#FEE9E8",
-    text: "#8E1F0B",
-  },
-  soon: {
-    label: "Azalıyor",
-    hint: "Yakında sipariş verin",
-    accent: "#E8A317",
-    soft: "#FFF4E0",
-    text: "#7A5100",
-  },
-  dead: {
-    label: "Satılmıyor",
-    hint: "Uzun süredir satış yok",
-    accent: "#2C6ECB",
-    soft: "#EAF4FF",
-    text: "#1F4C8C",
-  },
-  nodata: {
-    label: "Tahmin yok",
-    hint: "Yeterli satış geçmişi yok",
-    accent: "#8A8A8A",
-    soft: "#F1F1F1",
-    text: "#4A4A4A",
-  },
-};
+type CategoryMetaMap = { [K in Category]: CategoryMeta };
+
+// Kategori renkleri dilden bağımsız (accent/soft/text) — sadece label/hint
+// dile göre değişiyor. Bu yüzden sabit bir obje yerine, aktif sözlüğü (t)
+// alan bir fonksiyon: component her render'da kendi dilindeki metinlerle
+// çağırıyor (bkz. Index() içindeki `categoryMeta`).
+function buildCategoryMeta(t: Dictionary): CategoryMetaMap {
+  return {
+    out: {
+      label: t.categoryOutLabel,
+      hint: t.categoryOutHint,
+      accent: "#D72C0D",
+      soft: "#FEE9E8",
+      text: "#8E1F0B",
+    },
+    soon: {
+      label: t.categorySoonLabel,
+      hint: t.categorySoonHint,
+      accent: "#E8A317",
+      soft: "#FFF4E0",
+      text: "#7A5100",
+    },
+    dead: {
+      label: t.categoryDeadLabel,
+      hint: t.categoryDeadHint,
+      accent: "#2C6ECB",
+      soft: "#EAF4FF",
+      text: "#1F4C8C",
+    },
+    nodata: {
+      label: t.categoryNoDataLabel,
+      hint: t.categoryNoDataHint,
+      accent: "#8A8A8A",
+      soft: "#F1F1F1",
+      text: "#4A4A4A",
+    },
+  };
+}
 
 const CATEGORY_ORDER: Category[] = ["out", "soon", "dead", "nodata"];
 
@@ -532,24 +547,24 @@ function initials(title: string): string {
  * Hızlı satan ürün günlük, orta hızlı haftalık, yavaş satan aylık gösterilir.
  * Birim her zaman metnin içinde yazılı olduğu için satırlar karışmaz.
  */
-function rateText(dailyRate: number | null | undefined): string {
-  if (dailyRate == null) return "—";
-  if (dailyRate <= 0) return "Satış yok";
+function rateText(dailyRate: number | null | undefined, t: Dictionary): string {
+  if (dailyRate == null) return t.rateDash;
+  if (dailyRate <= 0) return t.rateNoSales;
 
   if (dailyRate >= RATE_MIN_READABLE) {
-    return `Günde ~${Math.round(dailyRate)} adet`;
+    return t.ratePerDay(Math.round(dailyRate));
   }
 
   const weekly = dailyRate * 7;
   if (weekly >= RATE_MIN_READABLE) {
-    return `Haftada ~${Math.round(weekly)} adet`;
+    return t.ratePerWeek(Math.round(weekly));
   }
 
   const monthly = dailyRate * 30;
   if (monthly >= 1) {
-    return `Ayda ~${Math.round(monthly)} adet`;
+    return t.ratePerMonth(Math.round(monthly));
   }
-  return "Ayda 1'den az";
+  return t.rateLessThanOnePerMonth;
 }
 
 // "Güven" teknik bir terim; düz cümleye çeviriyoruz.
@@ -561,13 +576,13 @@ function rateText(dailyRate: number | null | undefined): string {
 // "güvenilir" demek, sadece "low" (az veri) durumunda uyarı çıkıyor. Bu,
 // sektördeki iyi pratikle örtüşüyor: yeni/az verili ürünler ayrı işaretlenir,
 // güvenilir tahminler ekstra bir rozetle kalabalıklaştırılmaz.
-function confidenceText(value: string): string | null {
-  if (value === "low") return "Kaba tahmin — satış geçmişi az";
+function confidenceText(value: string, t: Dictionary): string | null {
+  if (value === "low") return t.lowConfidenceNote;
   return null;
 }
 
-function stockoutDateText(days: number): string {
-  return new Date(Date.now() + days * 86_400_000).toLocaleDateString("tr-TR", {
+function stockoutDateText(days: number, locale: Locale): string {
+  return new Date(Date.now() + days * 86_400_000).toLocaleDateString(intlLocale(locale), {
     day: "numeric",
     month: "long",
   });
@@ -584,11 +599,13 @@ function stockoutDateText(days: number): string {
 // Dosya biçimi CSV'dir (gerçek .xlsx değil) ama Excel'de doğrudan açıldığı
 // için buton metninde "Excel indir" deniyor — mağaza sahibi için tanıdık.
 
-function slugifyFilterName(filter: Filter): string {
-  if (filter === "all") return "tum-urunler";
-  if (filter === "urgent") return "acil-urunler";
-  return CATEGORY_META[filter].label
-    .toLocaleLowerCase("tr-TR")
+function slugifyFilterName(filter: Filter, t: Dictionary, categoryMeta: CategoryMetaMap): string {
+  if (filter === "all") return t.filenameAllProducts;
+  if (filter === "urgent") return t.filenameUrgentProducts;
+  // Dosya adı ASCII olmalı — hem Türkçe hem İngilizce etiketler için
+  // aynı normalize zinciri çalışıyor (İngilizce'de zaten aksan yok).
+  return categoryMeta[filter].label
+    .toLocaleLowerCase("en-US")
     .replace(/ı/g, "i")
     .replace(/ş/g, "s")
     .replace(/ğ/g, "g")
@@ -609,30 +626,34 @@ function csvField(value: string): string {
 // item burada bilinçli olarak `any`: loader'ın döndürdüğü satır tipi bu
 // dosyada zaten hiçbir yerde katı biçimde tanımlanmamış (RunwayCell'deki
 // `String(item.confidence ?? "")` kullanımıyla aynı yaklaşım).
-function runwayCsvText(item: any, category: Category): string {
-  if (category === "out") return "Stok bitti";
-  if (category === "dead") return "Uzun süredir satılmıyor";
-  if (category === "nodata") return "Tahmin için yeterli satış geçmişi yok";
+function runwayCsvText(item: any, category: Category, t: Dictionary, locale: Locale): string {
+  if (category === "out") return t.csvOut;
+  if (category === "dead") return t.csvDead;
+  if (category === "nodata") return t.csvNoDataRunway;
   const days = item.stockoutInDays;
-  if (days == null) return "—";
+  if (days == null) return t.csvDash;
   const rounded = Math.round(days);
-  if (rounded <= 0) return "Bugün bitebilir";
-  return `${rounded} gün sonra (${stockoutDateText(rounded)} civarı)`;
+  if (rounded <= 0) return t.csvToday;
+  return t.csvDaysLater(rounded, stockoutDateText(rounded, locale));
 }
 
-function buildCsv(rows: Array<{ item: any; category: Category }>): string {
-  const headers = ["Ürün", "Varyant", "Durum", "Stok", "Satış Hızı", "Ne Zaman Biter", "Not"];
-  const lines = [headers.map(csvField).join(",")];
+function buildCsv(
+  rows: Array<{ item: any; category: Category }>,
+  t: Dictionary,
+  locale: Locale,
+  categoryMeta: CategoryMetaMap,
+): string {
+  const lines = [t.csvHeaders.map(csvField).join(",")];
 
   for (const { item, category } of rows) {
-    const note = category === "soon" ? confidenceText(String(item.confidence ?? "")) ?? "" : "";
+    const note = category === "soon" ? confidenceText(String(item.confidence ?? ""), t) ?? "" : "";
     const row = [
       item.productTitle ?? "",
       item.variantTitle && item.variantTitle !== "Default Title" ? item.variantTitle : "",
-      CATEGORY_META[category].label,
+      categoryMeta[category].label,
       String(item.available ?? ""),
-      rateText(item.dailyRate),
-      runwayCsvText(item, category),
+      rateText(item.dailyRate, t),
+      runwayCsvText(item, category, t, locale),
       note,
     ];
     lines.push(row.map(csvField).join(","));
@@ -737,11 +758,12 @@ type SummaryCardProps = {
   category: Category;
   count: number;
   active: boolean;
+  categoryMeta: CategoryMetaMap;
   onClick: () => void;
 };
 
 function SummaryCard(props: SummaryCardProps) {
-  const meta = CATEGORY_META[props.category];
+  const meta = props.categoryMeta[props.category];
   // Sayısı 0 olan kart tıklanınca boş listeye düşürüyordu; tıklanamaz yapıldı.
   const empty = props.count === 0;
 
@@ -802,10 +824,12 @@ function SummaryCard(props: SummaryCardProps) {
 type AllProductsCardProps = {
   count: number;
   showingAll: boolean;
+  t: Dictionary;
   onClick: () => void;
 };
 
 function AllProductsCard(props: AllProductsCardProps) {
+  const { t } = props;
   const accentVar = { "--invf-card-accent": ALL_PRODUCTS_ACCENT } as CSSProperties;
 
   const style: CSSProperties = {
@@ -837,9 +861,9 @@ function AllProductsCard(props: AllProductsCardProps) {
     >
       <CardStripe color={ALL_PRODUCTS_ACCENT} />
       <div style={{ display: "flex", flexDirection: "column", gap: 1, minWidth: 0 }}>
-        <span style={{ fontSize: 14, fontWeight: 700, color: "#1A1A1A" }}>Tüm ürünler</span>
+        <span style={{ fontSize: 14, fontWeight: 700, color: "#1A1A1A" }}>{t.allProductsTitle}</span>
         <span style={{ fontSize: 12.5, color: "#6B6B6B" }}>
-          {props.showingAll ? "Şu an bunu görüntülüyorsunuz" : "Süzgeci kaldır, hepsini gör"}
+          {props.showingAll ? t.allProductsShowingAll : t.allProductsClearFilter}
         </span>
       </div>
       {/* Diğer kartlardaki büyük/kalın/siyah sayı stiliyle birebir aynı —
@@ -859,10 +883,12 @@ type RefreshBarProps = {
   lastUpdated: string;
   isRefreshing: boolean;
   justRefreshed: boolean;
+  t: Dictionary;
   onRefresh: () => void;
 };
 
 function RefreshBar(props: RefreshBarProps) {
+  const { t } = props;
   const buttonStyle: CSSProperties = {
     all: "unset",
     boxSizing: "border-box",
@@ -904,13 +930,14 @@ function RefreshBar(props: RefreshBarProps) {
         style={{ display: "flex", flexDirection: "column", gap: 2, ...dimStyle(props.isRefreshing) }}
       >
         <span style={{ fontSize: 14, fontWeight: 600, color: "#1A1A1A" }}>
-          Satış hızınıza göre hangi ürünün ne zaman biteceği
+          {t.refreshSubtitle}
         </span>
         <span style={{ fontSize: 12.5, color: "#6B6B6B" }}>
-          Son güncelleme: {props.lastUpdated}
+          {t.lastUpdatedPrefix}
+          {props.lastUpdated}
           {props.justRefreshed && !props.isRefreshing && (
             <span style={{ marginLeft: 8, fontWeight: 600, color: "#008060" }}>
-              ✓ Az önce güncellendi
+              {t.justRefreshed}
             </span>
           )}
         </span>
@@ -923,7 +950,7 @@ function RefreshBar(props: RefreshBarProps) {
         disabled={props.isRefreshing}
       >
         <span style={iconStyle}>↻</span>
-        {props.isRefreshing ? "Yenileniyor…" : "Verileri yenile"}
+        {props.isRefreshing ? t.refreshing : t.refreshButton}
       </button>
     </div>
   );
@@ -933,8 +960,8 @@ function RefreshBar(props: RefreshBarProps) {
 // Küçük parçalar
 // ---------------------------------------------------------------------------
 
-function StatusPill(props: { category: Category }) {
-  const meta = CATEGORY_META[props.category];
+function StatusPill(props: { category: Category; categoryMeta: CategoryMetaMap }) {
+  const meta = props.categoryMeta[props.category];
   return (
     <span
       style={{
@@ -960,16 +987,16 @@ function CellLabel(props: { children: ReactNode }) {
   return <span className="invf-label">{props.children}</span>;
 }
 
-function RunwayCell(props: { days: number; confidence: string }) {
-  const { days } = props;
-  const note = confidenceText(props.confidence);
+function RunwayCell(props: { days: number; confidence: string; t: Dictionary; locale: Locale }) {
+  const { days, t, locale } = props;
+  const note = confidenceText(props.confidence, t);
 
   // 0 güne yuvarlanan tahmin "≈0 gün sonra" olarak okunuyordu; düz cümleye çevrildi.
   if (days <= 0) {
     return (
       <div>
         <span className="invf-days-chip" style={{ background: "#FEE9E8", color: "#C4210B" }}>
-          Bugün bitebilir
+          {t.runwayToday}
         </span>
         {note && <span className="invf-note">{note}</span>}
       </div>
@@ -983,9 +1010,9 @@ function RunwayCell(props: { days: number; confidence: string }) {
     <div>
       <span className="invf-days-chip" style={{ background: bg, color: fg }}>
         ≈{days}
-        <small>GÜN SONRA</small>
+        <small>{t.runwayDaysSuffix}</small>
       </span>
-      <span className="invf-sub">{stockoutDateText(days)} civarı</span>
+      <span className="invf-sub">{t.runwayAround(stockoutDateText(days, locale))}</span>
       {note && <span className="invf-note">{note}</span>}
     </div>
   );
@@ -1004,7 +1031,11 @@ export default function Index() {
     reorderAlerts,
     computedAt,
     fromCache,
+    locale,
   } = useLoaderData<typeof loader>();
+
+  const t = getDictionary(locale);
+  const categoryMeta = buildCategoryMeta(t);
 
   const navigate = useNavigate();
   const navigation = useNavigation();
@@ -1061,7 +1092,7 @@ export default function Index() {
   };
 
   const filteredRows = useMemo(() => {
-    const q = query.trim().toLocaleLowerCase("tr-TR");
+    const q = query.trim().toLocaleLowerCase(intlLocale(locale));
     return allRows.filter(({ item, category }) => {
       if (filter === "urgent") {
         const urgent =
@@ -1072,10 +1103,10 @@ export default function Index() {
         return false;
       }
       if (!q) return true;
-      const haystack = `${item.productTitle} ${item.variantTitle}`.toLocaleLowerCase("tr-TR");
+      const haystack = `${item.productTitle} ${item.variantTitle}`.toLocaleLowerCase(intlLocale(locale));
       return haystack.includes(q);
     });
-  }, [allRows, filter, query]);
+  }, [allRows, filter, query, locale]);
 
   const totalPages = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
@@ -1104,13 +1135,13 @@ export default function Index() {
   }
 
   function handleExport() {
-    const csv = buildCsv(filteredRows);
-    const label = slugifyFilterName(filter);
+    const csv = buildCsv(filteredRows, t, locale, categoryMeta);
+    const label = slugifyFilterName(filter, t, categoryMeta);
     const dateStr = new Date().toISOString().slice(0, 10);
-    downloadCsv(csv, `envanter-${label}-${dateStr}.csv`);
+    downloadCsv(csv, `${t.filenamePrefix}-${label}-${dateStr}.csv`);
   }
 
-  const lastUpdated = new Date(computedAt).toLocaleString("tr-TR", {
+  const lastUpdated = new Date(computedAt).toLocaleString(intlLocale(locale), {
     day: "numeric",
     month: "long",
     hour: "2-digit",
@@ -1121,27 +1152,27 @@ export default function Index() {
   const urgentSoonCount = Math.max(0, reorderAlerts.length - outOfStock.length);
   const alertParts: string[] = [];
   if (outOfStock.length > 0) {
-    alertParts.push(`${outOfStock.length} ürünün stoğu bitti`);
+    alertParts.push(t.outOfStockPart(outOfStock.length));
   }
   if (urgentSoonCount > 0) {
-    alertParts.push(`${urgentSoonCount} ürün ${URGENT_DAYS} gün içinde bitiyor`);
+    alertParts.push(t.soonPart(urgentSoonCount, URGENT_DAYS));
   }
   const alertDescription = alertParts.length > 0 ? `${alertParts.join(", ")}.` : undefined;
 
   // ---- Süzgeç durumu -------------------------------------------------------
   const trimmedQuery = query.trim();
   const activeFilterLabel =
-    filter === "all" ? null : filter === "urgent" ? "Acil ürünler" : CATEGORY_META[filter].label;
+    filter === "all" ? null : filter === "urgent" ? t.urgentFilterLabel : categoryMeta[filter].label;
   const isFiltered = activeFilterLabel !== null || trimmedQuery.length > 0;
 
   const subtitleParts: string[] = [];
   if (isFiltered) {
-    subtitleParts.push(`${allRows.length} üründen ${filteredRows.length} tanesi gösteriliyor`);
-    if (activeFilterLabel) subtitleParts.push(`Süzgeç: ${activeFilterLabel}`);
-    if (trimmedQuery) subtitleParts.push(`Arama: "${trimmedQuery}"`);
+    subtitleParts.push(t.subtitleFilteredCount(allRows.length, filteredRows.length));
+    if (activeFilterLabel) subtitleParts.push(t.subtitleFilterPrefix(activeFilterLabel));
+    if (trimmedQuery) subtitleParts.push(t.subtitleSearchPrefix(trimmedQuery));
   } else {
-    subtitleParts.push(`${allRows.length} ürün`);
-    if (allRows.length > 0) subtitleParts.push("en acil olanlar en üstte");
+    subtitleParts.push(t.subtitleAllCount(allRows.length));
+    if (allRows.length > 0) subtitleParts.push(t.subtitleSortHint);
   }
 
   // Excel indir butonunun tooltip'inde ne indirdiğini söylemesi için
@@ -1150,7 +1181,7 @@ export default function Index() {
     const parts: string[] = [];
     if (activeFilterLabel) parts.push(activeFilterLabel);
     if (trimmedQuery) parts.push(`"${trimmedQuery}"`);
-    return parts.length > 0 ? parts.join(" · ") : "Tüm ürünler";
+    return parts.length > 0 ? parts.join(" · ") : t.allProductsTitle;
   })();
 
   // Köşeye sıkışık durmasın, listeye biraz daha yakın dursun diye sağdan
@@ -1176,7 +1207,7 @@ export default function Index() {
 
   return (
     <>
-      <s-page heading="Envanter Tahmini">
+      <s-page heading={t.pageHeading}>
         <style>{PAGE_CSS}</style>
 
         <s-stack gap="base">
@@ -1184,6 +1215,7 @@ export default function Index() {
             lastUpdated={lastUpdated}
             isRefreshing={isRefreshing}
             justRefreshed={!fromCache}
+            t={t}
             onRefresh={refresh}
           />
 
@@ -1196,17 +1228,17 @@ export default function Index() {
             {reorderAlerts.length > 0 ? (
               <AlertBox
                 tone={outOfStock.length > 0 ? "critical" : "warning"}
-                title={`${reorderAlerts.length} ürün için sipariş vakti geldi`}
+                title={t.reorderAlertTitle(reorderAlerts.length)}
                 description={alertDescription}
-                actionLabel="Acil ürünleri göster"
+                actionLabel={t.showUrgentAction}
                 onAction={showUrgent}
               />
             ) : (
               allRows.length > 0 && (
                 <AlertBox
                   tone="success"
-                  title="Şu an sipariş verilmesi gereken ürün yok"
-                  description={`Hiçbir ürünün stoğu ${URGENT_DAYS} gün içinde bitmiyor.`}
+                  title={t.noReorderTitle}
+                  description={t.noReorderDescription(URGENT_DAYS)}
                 />
               )
             )}
@@ -1218,6 +1250,7 @@ export default function Index() {
                   category={cat}
                   count={counts[cat]}
                   active={filter === cat}
+                  categoryMeta={categoryMeta}
                   onClick={() => changeFilter(cat)}
                 />
               ))}
@@ -1231,13 +1264,12 @@ export default function Index() {
               <AllProductsCard
                 count={allRows.length}
                 showingAll={!isFiltered}
+                t={t}
                 onClick={clearFilter}
               />
             )}
 
-            <span className="invf-hint">
-              Listeyi süzmek için yukarıdaki kartlardan birine dokunun.
-            </span>
+            <span className="invf-hint">{t.filterHint}</span>
 
             {/* ------------------------- Ürün listesi ------------------------- */}
             <div className="invf-list-card" ref={listRef}>
@@ -1245,7 +1277,7 @@ export default function Index() {
                 <div className="invf-toolbar-top">
                   <div style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
                     <span style={{ fontSize: 16, fontWeight: 700, color: "#1A1A1A" }}>
-                      Ürünler
+                      {t.productsSectionTitle}
                     </span>
                     <span style={{ fontSize: 13, color: "#5C5C5C" }}>
                       {subtitleParts.join(" · ")}
@@ -1258,14 +1290,14 @@ export default function Index() {
                         type="button"
                         className="invf-export-btn"
                         onClick={handleExport}
-                        title={`${filterContextLabel} · ${filteredRows.length} ürünü Excel'de açılabilen bir CSV dosyası olarak indirir.`}
+                        title={t.excelTooltip(filterContextLabel, filteredRows.length)}
                       >
-                        {`Excel indir (${filteredRows.length})`}
+                        {t.excelButton(filteredRows.length)}
                       </button>
                     )}
                     {isFiltered && (
                       <button type="button" className="invf-clear-btn" onClick={clearFilter}>
-                        {`Tüm ürünleri göster (${allRows.length})`}
+                        {t.clearFilterButton(allRows.length)}
                       </button>
                     )}
                   </div>
@@ -1276,8 +1308,8 @@ export default function Index() {
                   <input
                     type="search"
                     value={queryInput}
-                    placeholder="Ürün adıyla ara"
-                    aria-label="Ürün ara"
+                    placeholder={t.searchPlaceholder}
+                    aria-label={t.searchAriaLabel}
                     onChange={(e) => setQueryInput(e.target.value)}
                   />
                 </div>
@@ -1285,22 +1317,22 @@ export default function Index() {
 
               {pageRows.length > 0 && (
                 <div className="invf-head">
-                  <span>Ürün</span>
-                  <span>Durum</span>
-                  <span>Stok</span>
-                  <span>Satış hızı</span>
-                  <span>Ne zaman biter?</span>
+                  <span>{t.colProduct}</span>
+                  <span>{t.colStatus}</span>
+                  <span>{t.colStock}</span>
+                  <span>{t.colRate}</span>
+                  <span>{t.colRunway}</span>
                 </div>
               )}
 
               {pageRows.map(({ item, category }) => {
-                const meta = CATEGORY_META[category];
+                const meta = categoryMeta[category];
 
                 let runway: ReactNode;
                 if (category === "out") {
                   runway = (
                     <span style={{ fontSize: 14, fontWeight: 700, color: "#D72C0D" }}>
-                      Stok bitti — hemen sipariş verin
+                      {t.outRunway}
                     </span>
                   );
                 } else if (category === "soon" && item.stockoutInDays != null) {
@@ -1308,17 +1340,19 @@ export default function Index() {
                     <RunwayCell
                       days={Math.round(item.stockoutInDays)}
                       confidence={String(item.confidence ?? "")}
+                      t={t}
+                      locale={locale}
                     />
                   );
                 } else if (category === "dead") {
                   runway = (
                     <span style={{ fontSize: 13.5, fontWeight: 600, color: "#1F4C8C" }}>
-                      Uzun süredir satılmıyor
+                      {t.deadRunway}
                     </span>
                   );
                 } else {
                   runway = (
-                    <span className="invf-muted">Tahmin için yeterli satış geçmişi yok</span>
+                    <span className="invf-muted">{t.noDataRunway}</span>
                   );
                 }
 
@@ -1365,27 +1399,27 @@ export default function Index() {
                     </div>
 
                     <div className="invf-c-status">
-                      <CellLabel>Durum</CellLabel>
-                      <StatusPill category={category} />
+                      <CellLabel>{t.colStatus}</CellLabel>
+                      <StatusPill category={category} categoryMeta={categoryMeta} />
                     </div>
 
                     <div className="invf-c-stock">
-                      <CellLabel>Stok</CellLabel>
+                      <CellLabel>{t.colStock}</CellLabel>
                       <span className="invf-num" style={{ color: isOut ? "#D72C0D" : "#1A1A1A" }}>
                         {item.available}
-                        <small>adet</small>
+                        <small>{t.stockUnit}</small>
                       </span>
                     </div>
 
                     <div className="invf-c-rate">
-                      <CellLabel>Satış hızı</CellLabel>
+                      <CellLabel>{t.colRate}</CellLabel>
                       <span style={{ fontSize: 13.5, fontWeight: 600, color: "#1A1A1A" }}>
-                        {rateText(item.dailyRate)}
+                        {rateText(item.dailyRate, t)}
                       </span>
                     </div>
 
                     <div className="invf-wide">
-                      <CellLabel>Ne zaman biter?</CellLabel>
+                      <CellLabel>{t.colRunway}</CellLabel>
                       {runway}
                     </div>
                   </div>
@@ -1397,11 +1431,10 @@ export default function Index() {
                 <div className="invf-empty">
                   <span style={{ fontSize: 26 }}>📦</span>
                   <span style={{ fontSize: 15, fontWeight: 700, color: "#1A1A1A" }}>
-                    Gösterilecek ürün yok
+                    {t.emptyNoProductsTitle}
                   </span>
                   <span style={{ fontSize: 13, color: "#5C5C5C", maxWidth: 380 }}>
-                    Stok takibi açık bir ürün bulunamadı. Shopify'da ürünlerinizin stok takibinin
-                    açık olduğundan emin olun, sonra verileri yenileyin.
+                    {t.emptyNoProductsDesc}
                   </span>
                 </div>
               )}
@@ -1410,10 +1443,10 @@ export default function Index() {
                 <div className="invf-empty">
                   <span style={{ fontSize: 26 }}>🔍</span>
                   <span style={{ fontSize: 15, fontWeight: 700, color: "#1A1A1A" }}>
-                    Bu süzgeçle eşleşen ürün yok
+                    {t.emptyFilteredTitle}
                   </span>
                   <span style={{ fontSize: 13, color: "#5C5C5C" }}>
-                    Aramayı değiştirin ya da tüm ürünlere dönün.
+                    {t.emptyFilteredDesc}
                   </span>
                   <button
                     type="button"
@@ -1421,7 +1454,7 @@ export default function Index() {
                     style={{ marginTop: 6 }}
                     onClick={clearFilter}
                   >
-                    {`Tüm ürünleri göster (${allRows.length})`}
+                    {t.clearFilterButton(allRows.length)}
                   </button>
                 </div>
               )}
@@ -1443,10 +1476,10 @@ export default function Index() {
                     disabled={currentPage <= 1}
                     onClick={() => setPage(currentPage - 1)}
                   >
-                    ← Önceki
+                    {t.prevPage}
                   </button>
                   <span style={{ fontSize: 13, fontWeight: 600, color: "#303030" }}>
-                    {`Sayfa ${currentPage} / ${totalPages}`}
+                    {t.pageOf(currentPage, totalPages)}
                   </span>
                   <button
                     type="button"
@@ -1454,17 +1487,13 @@ export default function Index() {
                     disabled={currentPage >= totalPages}
                     onClick={() => setPage(currentPage + 1)}
                   >
-                    Sonraki →
+                    {t.nextPage}
                   </button>
                 </div>
               )}
 
               {allRows.length > 0 && (
-                <div className="invf-foot">
-                  Satış hızı, son 7 / 30 / 90 günlük satışlarınızın ağırlıklı ortalamasıdır. Birim
-                  ürünün hızına göre değişir: hızlı satanlarda günlük, yavaş satanlarda aylık
-                  gösterilir.
-                </div>
+                <div className="invf-foot">{t.footerNote}</div>
               )}
             </div>
           </div>
@@ -1479,8 +1508,9 @@ export default function Index() {
 
       {/* Geri bildirim: sol altta sabit/yüzen, sayfanın her yerinden
           scroll etmeden erişilebilir. Kendi konumunu ve stilini kendi
-          bileşen dosyasında (FeedbackButton.tsx) taşıyor. */}
-      <FeedbackButton />
+          bileşen dosyasında (FeedbackButton.tsx) taşıyor. Dil, admin
+          panelinin dilinden (locale) geliyor, kendi başına tespit etmiyor. */}
+      <FeedbackButton locale={locale} />
 
       {showScrollTop && (
         <button
@@ -1488,8 +1518,8 @@ export default function Index() {
           className="invf-scrolltop-btn"
           style={scrollTopButtonStyle}
           onClick={scrollToTop}
-          aria-label="Sayfanın başına dön"
-          title="Yukarı çık"
+          aria-label={t.scrollTopAriaLabel}
+          title={t.scrollTopTitle}
         >
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
             <path
