@@ -1,5 +1,6 @@
 import type { FormEvent } from "react";
 import { useEffect, useState } from "react";
+import { getDictionary, type Locale } from "../lib/translations";
 
 // ---------------------------------------------------------------------------
 // Web3Forms ayarı
@@ -163,7 +164,13 @@ const FEEDBACK_CSS = `
 }
 `;
 
-export function FeedbackButton() {
+type FeedbackButtonProps = {
+  locale: Locale;
+};
+
+export function FeedbackButton(props: FeedbackButtonProps) {
+  const t = getDictionary(props.locale);
+
   const [open, setOpen] = useState(false);
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -213,6 +220,10 @@ export function FeedbackButton() {
         headers: { "Content-Type": "application/json", Accept: "application/json" },
         body: JSON.stringify({
           access_key: WEB3FORMS_ACCESS_KEY,
+          // Bu alan isimleri (Ad/Soyad/E-posta/Mesaj) ve subject bilinçli
+          // olarak HER ZAMAN Türkçe — merchant'ın dili ne olursa olsun, bu
+          // e-postayı okuyan geliştiricinin kendisi (biz), mağaza sahibi
+          // değil. Yani bu, arayüz metni değil, dahili bir e-posta şablonu.
           subject: "Envanter Tahmini - Yeni geri bildirim",
           from_name: `${firstName} ${lastName}`.trim() || "İsimsiz kullanıcı",
           Ad: firstName,
@@ -236,10 +247,10 @@ export function FeedbackButton() {
         type="button"
         className="invf-fb-trigger"
         onClick={() => setOpen(true)}
-        aria-label="Geri bildirim"
+        aria-label={t.feedbackTrigger}
       >
         <span aria-hidden="true">💬</span>
-        <span className="invf-fb-label">Geri bildirim</span>
+        <span className="invf-fb-label">{t.feedbackTrigger}</span>
       </button>
 
       {open && (
@@ -253,7 +264,7 @@ export function FeedbackButton() {
             className="invf-fb-panel"
             role="dialog"
             aria-modal="true"
-            aria-label="Geri bildirim formu"
+            aria-label={t.feedbackDialogAriaLabel}
           >
             <div
               style={{
@@ -265,17 +276,17 @@ export function FeedbackButton() {
             >
               <div>
                 <div style={{ fontSize: 17, fontWeight: 700, color: "#1A1A1A" }}>
-                  Görüş, öneri ya da sorun bildir
+                  {t.feedbackModalTitle}
                 </div>
                 <div style={{ fontSize: 13, color: "#6B6B6B", marginTop: 3 }}>
-                  Uygulamayı geliştirmemize yardımcı olur, teşekkürler.
+                  {t.feedbackModalSubtitle}
                 </div>
               </div>
               <button
                 type="button"
                 className="invf-fb-close"
                 onClick={closeAndReset}
-                aria-label="Kapat"
+                aria-label={t.feedbackCloseAriaLabel}
               >
                 ✕
               </button>
@@ -285,10 +296,10 @@ export function FeedbackButton() {
               <div style={{ padding: "20px 0", textAlign: "center" }}>
                 <div style={{ fontSize: 30, marginBottom: 8 }}>✓</div>
                 <div style={{ fontSize: 15, fontWeight: 700, color: "#0C5132" }}>
-                  Mesajınız iletildi
+                  {t.feedbackSuccessTitle}
                 </div>
                 <div style={{ fontSize: 13, color: "#6B6B6B", marginTop: 4 }}>
-                  En kısa sürede döneceğiz.
+                  {t.feedbackSuccessSubtitle}
                 </div>
                 <button
                   type="button"
@@ -296,14 +307,14 @@ export function FeedbackButton() {
                   style={{ marginTop: 18 }}
                   onClick={closeAndReset}
                 >
-                  Kapat
+                  {t.feedbackCloseButton}
                 </button>
               </div>
             ) : (
               <form onSubmit={handleSubmit}>
                 <div style={{ display: "flex", gap: 10 }}>
                   <div className="invf-fb-field" style={{ flex: 1 }}>
-                    <label htmlFor="invf-fb-first">Ad</label>
+                    <label htmlFor="invf-fb-first">{t.feedbackFieldFirstName}</label>
                     <input
                       id="invf-fb-first"
                       type="text"
@@ -313,7 +324,7 @@ export function FeedbackButton() {
                     />
                   </div>
                   <div className="invf-fb-field" style={{ flex: 1 }}>
-                    <label htmlFor="invf-fb-last">Soyad</label>
+                    <label htmlFor="invf-fb-last">{t.feedbackFieldLastName}</label>
                     <input
                       id="invf-fb-last"
                       type="text"
@@ -325,7 +336,7 @@ export function FeedbackButton() {
                 </div>
 
                 <div className="invf-fb-field">
-                  <label htmlFor="invf-fb-email">E-posta</label>
+                  <label htmlFor="invf-fb-email">{t.feedbackFieldEmail}</label>
                   <input
                     id="invf-fb-email"
                     type="email"
@@ -336,24 +347,24 @@ export function FeedbackButton() {
                 </div>
 
                 <div className="invf-fb-field">
-                  <label htmlFor="invf-fb-message">Mesajınız</label>
+                  <label htmlFor="invf-fb-message">{t.feedbackFieldMessage}</label>
                   <textarea
                     id="invf-fb-message"
                     required
                     value={message}
                     onChange={(e) => setMessage(e.target.value)}
-                    placeholder="Ne düşünüyorsunuz, neyi eksik buldunuz?"
+                    placeholder={t.feedbackMessagePlaceholder}
                   />
                 </div>
 
                 {status === "error" && (
                   <div style={{ fontSize: 13, color: "#C4210B", marginBottom: 12 }}>
-                    Gönderilemedi, lütfen tekrar deneyin.
+                    {t.feedbackErrorText}
                   </div>
                 )}
 
                 <button type="submit" className="invf-fb-submit" disabled={status === "sending"}>
-                  {status === "sending" ? "Gönderiliyor…" : "Gönder"}
+                  {status === "sending" ? t.feedbackSubmitting : t.feedbackSubmit}
                 </button>
               </form>
             )}
