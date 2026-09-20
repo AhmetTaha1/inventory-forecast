@@ -53,7 +53,10 @@ const FEEDBACK_CSS = `
   transition: background 150ms ease, border-color 150ms ease, transform 150ms ease, box-shadow 150ms ease, opacity 150ms ease !important;
 }
 .invf-fb-trigger:hover {
-  background: #F7F7F7 !important;
+  /* Arka plan bilerek DEĞİŞMİYOR: mobilde butonun tamamı yeşil daireye
+     dönüştüğü için hover'da beyaza dönmesi, beyaz ikonu (arka planla aynı
+     renge düşüp) görünmez yapıyordu. "Yukarı çık" butonundaki gibi sadece
+     hafif bir yükselme + gölge artışı yeterli bir hover geri bildirimi. */
   border-color: #008060 !important;
   transform: translateY(-2px) !important;
   box-shadow: 0 8px 20px rgba(0,0,0,0.22) !important;
