@@ -45,6 +45,7 @@ export type SalesSnapshot = {
         lineItemsNoVariant: number;
         refundedOrRemovedUnits: number;
         extraLineItemFetches: number;
+        extraInventoryLevelFetches: number;
     };
 };
 
@@ -66,12 +67,33 @@ const VARIANTS_QUERY = `#graphql
         product { id title status isGiftCard featuredImage { url } }
         inventoryItem {
           tracked
-          inventoryLevels(first: 10) {
-            pageInfo { hasNextPage }
+          inventoryLevels(first: 50) {
+            pageInfo { hasNextPage endCursor }
             nodes {
               location { id name }
               quantities(names: ["available"]) { name quantity }
             }
+          }
+        }
+      }
+    }
+  }`;
+
+// YENİ (çoklu lokasyon düzeltmesi): bir varyantın 50'den fazla lokasyonu
+// varsa (nadir ama mümkün — büyük perakendeci/çok depolu mağazalar),
+// önceden bu durumda kalan lokasyonlar sessizce sayılmıyordu (sadece
+// `levelsTruncated` bayrağı loglanıyordu, mağaza sahibine hiç
+// yansımıyordu). Artık sipariş kalemlerindeki (ORDER_LINE_ITEMS_QUERY)
+// aynı sayfalama deseniyle kalan lokasyonlar da çekiliyor.
+const VARIANT_INVENTORY_LEVELS_QUERY = `#graphql
+  query InvVariantLevels($id: ID!, $cursor: String) {
+    productVariant(id: $id) {
+      inventoryItem {
+        inventoryLevels(first: 50, after: $cursor) {
+          pageInfo { hasNextPage endCursor }
+          nodes {
+            location { id name }
+            quantities(names: ["available"]) { name quantity }
           }
         }
       }
@@ -143,7 +165,7 @@ export async function fetchSalesSnapshot(admin: Admin, days = 365): Promise<Sale
     const stats: SalesSnapshot["stats"] = {
         variantPages: 0, orderPages: 0, ordersSeen: 0, ordersCancelled: 0,
         lineItemsSeen: 0, lineItemsNoVariant: 0, refundedOrRemovedUnits: 0,
-        extraLineItemFetches: 0,
+        extraLineItemFetches: 0, extraInventoryLevelFetches: 0,
     };
 
     // --- 1) Varyantlar + stok (sayfalı) ---
@@ -157,11 +179,26 @@ export async function fetchSalesSnapshot(admin: Admin, days = 365): Promise<Sale
             const levels = v.inventoryItem?.inventoryLevels;
             const byLocation: Record<string, number> = {};
             let available = 0;
-            for (const lvl of levels?.nodes ?? []) {
-                const q = lvl.quantities.find((x: any) => x.name === "available")?.quantity ?? 0;
-                byLocation[lvl.location.name] = q;
-                available += q;
+            const addLevels = (nodes: any[]) => {
+                for (const lvl of nodes ?? []) {
+                    const q = lvl.quantities.find((x: any) => x.name === "available")?.quantity ?? 0;
+                    byLocation[lvl.location.name] = q;
+                    available += q;
+                }
+            };
+            addLevels(levels?.nodes);
+
+            // 50'den fazla lokasyonlu varyant: kalanını ayrıca çek, sessizce kesme
+            // (ORDER_LINE_ITEMS_QUERY'deki 25+ kalemli sipariş deseniyle aynı mantık).
+            let levelsCursor = levels?.pageInfo?.hasNextPage ? levels.pageInfo.endCursor : null;
+            while (levelsCursor) {
+                stats.extraInventoryLevelFetches++;
+                const d = await gql(admin, VARIANT_INVENTORY_LEVELS_QUERY, { id: v.id, cursor: levelsCursor });
+                const extra = d.productVariant?.inventoryItem?.inventoryLevels;
+                addLevels(extra?.nodes);
+                levelsCursor = extra?.pageInfo?.hasNextPage ? extra.pageInfo.endCursor : null;
             }
+
             variants.set(v.id, {
                 variantId: v.id,
                 variantTitle: v.title,
@@ -173,7 +210,9 @@ export async function fetchSalesSnapshot(admin: Admin, days = 365): Promise<Sale
                 imageUrl: v.product.featuredImage?.url ?? null, // <-- YENİ
                 available,
                 byLocation,
-                levelsTruncated: levels?.pageInfo?.hasNextPage ?? false,
+                // Artık tüm sayfalar çekildiği için bu her zaman false olmalı —
+                // true çıkarsa sayfalama döngüsünde bir hata var demektir (kanarya).
+                levelsTruncated: false,
             });
         }
         cursor = conn.pageInfo.hasNextPage ? conn.pageInfo.endCursor : null;

@@ -13,5 +13,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     await db.session.deleteMany({ where: { shop } });
   }
 
+  // Mağazanın tahmin önbelleğini de hemen temizliyoruz — 48 saat sonra
+  // gelecek shop/redact webhook'unu (bkz. webhooks.compliance.tsx) beklemeye
+  // gerek yok, veri minimizasyonu için uninstall anında silmek daha doğru.
+  await db.forecastSnapshot.deleteMany({ where: { shop } });
+
   return new Response();
 };
