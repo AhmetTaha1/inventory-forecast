@@ -12,10 +12,13 @@ import {
 import type { Category, CategoryMetaMap, Filter } from "../types/inventory";
 
 // "Yukarı çık" / "geri bildirim" butonlarının viewport kenarına ne kadar
-// yakın duracağı. Ölçüm tamamlanana kadarki yedek değer + geniş
-// ekranlarda düşülebilecek en düşük taban.
+// yakın duracağı. 44px hem ölçüm tamamlanana kadarki yedek değer HEM DE
+// düşülebilecek taban — kart viewport'a neredeyse tam yaslanmışsa (dar/orta
+// genişlikte pencere) ölçülen boşluk çok küçük çıkar ve buton tablo
+// metninin üzerine biner; bu yüzden asla 44px'in altına inmiyor. Sadece
+// gerçekten geniş ekranlarda (kart etrafında bariz boş alan varsa) ölçülen
+// daha büyük değere geçiliyor.
 const FLOATING_BUTTON_DEFAULT_OFFSET = 44;
-const FLOATING_BUTTON_MIN_OFFSET = 16;
 // Butonlar, ürün listesi kartının kenarından bu kadar dışarı taşıyor —
 // tam kenara yapışık değil ama ona görünüşte "ait" duruyor.
 const FLOATING_BUTTON_EDGE_GAP = 8;
@@ -92,8 +95,8 @@ export function useInventoryView({
       const rect = listRef.current?.getBoundingClientRect();
       if (!rect) return;
       setFloatingOffsets({
-        left: Math.max(FLOATING_BUTTON_MIN_OFFSET, rect.left - FLOATING_BUTTON_EDGE_GAP),
-        right: Math.max(FLOATING_BUTTON_MIN_OFFSET, window.innerWidth - rect.right - FLOATING_BUTTON_EDGE_GAP),
+        left: Math.max(FLOATING_BUTTON_DEFAULT_OFFSET, rect.left - FLOATING_BUTTON_EDGE_GAP),
+        right: Math.max(FLOATING_BUTTON_DEFAULT_OFFSET, window.innerWidth - rect.right - FLOATING_BUTTON_EDGE_GAP),
       });
     }
     measure();
