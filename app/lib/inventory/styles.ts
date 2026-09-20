@@ -320,7 +320,7 @@ export const PAGE_CSS = `
 
 /* --------------------------- Yukarı çık butonu --------------------------- */
 .invf-scrolltop-btn {
-  transition: transform 150ms ease, box-shadow 150ms ease, background 150ms ease !important;
+  transition: transform 150ms ease, box-shadow 150ms ease, background 150ms ease, opacity 150ms ease !important;
 }
 .invf-scrolltop-btn:hover {
   transform: translateY(-3px) scale(1.06) !important;

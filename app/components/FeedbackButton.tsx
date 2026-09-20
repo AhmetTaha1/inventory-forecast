@@ -50,7 +50,7 @@ const FEEDBACK_CSS = `
   font-weight: 600;
   color: #1A1A1A;
   box-shadow: 0 4px 14px rgba(0,0,0,0.18);
-  transition: background 150ms ease, border-color 150ms ease, transform 150ms ease, box-shadow 150ms ease !important;
+  transition: background 150ms ease, border-color 150ms ease, transform 150ms ease, box-shadow 150ms ease, opacity 150ms ease !important;
 }
 .invf-fb-trigger:hover {
   background: #F7F7F7 !important;
@@ -192,6 +192,9 @@ type FeedbackButtonProps = {
   // sol boşluk (bkz. useInventoryView.ts). Verilmezse CSS'teki 44px
   // varsayılanı kullanılır — mobilde zaten !important kuralı bunu eziyor.
   leftOffset?: number;
+  // Aktif kaydırma sırasında true — buton soluklaşıp küçülür, altındaki
+  // liste satırının metnini tamamen kapatmasın diye (bkz. useInventoryView.ts).
+  isScrolling?: boolean;
 };
 
 export function FeedbackButton(props: FeedbackButtonProps) {
@@ -272,7 +275,12 @@ export function FeedbackButton(props: FeedbackButtonProps) {
       <button
         type="button"
         className="invf-fb-trigger"
-        style={props.leftOffset != null ? { left: props.leftOffset } : undefined}
+        style={{
+          left: props.leftOffset,
+          opacity: props.isScrolling ? 0.35 : 1,
+          transform: props.isScrolling ? "scale(0.85)" : "scale(1)",
+          pointerEvents: props.isScrolling ? "none" : "auto",
+        }}
         onClick={() => setOpen(true)}
         aria-label={t.feedbackTrigger}
       >
