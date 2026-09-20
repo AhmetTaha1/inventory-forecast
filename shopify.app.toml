@@ -6,32 +6,11 @@ embedded = true
 name = "inventory-forecast"
 
 [access_scopes]
-# Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
-scopes = "read_orders,read_all_orders,read_products,read_inventory,read_locations,write_products,write_orders,write_inventory"
-
-[product.metafields.app.demo_info]
-type = "single_line_text_field"
-name = "Demo Source Info"
-description = "Tracks products created by the Shopify app template for development"
-
-  [product.metafields.app.demo_info.access]
-  admin = "merchant_read_write"
-
-[metaobjects.app.example]
-name = "Example"
-description = "An example metaobject definition created by this template"
-
-  [metaobjects.app.example.access]
-  admin = "merchant_read_write"
-
-[metaobjects.app.example.fields.title]
-name = "Title"
-type = "single_line_text_field"
-required = true
-
-[metaobjects.app.example.fields.description]
-name = "Description"
-type = "multi_line_text_field"
+# Kod tabanında sadece tek bir salt-okuma GraphQL sorgusu var (sales.server.ts) —
+# mutation hiç yok. Template'ten kalan write_products/write_orders/write_inventory
+# kaldırıldı: hem kurulum ekranında gereksiz/korkutucu izin istemiyoruz hem de
+# App Store incelemesinde kullanılmayan geniş izinler soru işareti yaratır.
+scopes = "read_orders,read_all_orders,read_products,read_inventory,read_locations"
 
 [webhooks]
 api_version = "2026-10"
@@ -43,6 +22,13 @@ api_version = "2026-10"
   [[webhooks.subscriptions]]
   uri = "/webhooks/app/scopes_update"
   topics = [ "app/scopes_update" ]
+
+  # Shopify'ın App Store'a kabul için ZORUNLU tuttuğu 3 GDPR webhook'u —
+  # bkz. app/routes/webhooks.compliance.tsx. Müşteri verisi tutmasak bile
+  # gerekli; olmadan uygulama App Store'a hiç gönderilemez.
+  [[webhooks.subscriptions]]
+  compliance_topics = [ "customers/data_request", "customers/redact", "shop/redact" ]
+  uri = "/webhooks/compliance"
 
 [auth]
 redirect_urls = [ "https://example.com/api/auth" ]
