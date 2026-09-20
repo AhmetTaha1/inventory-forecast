@@ -10,11 +10,19 @@ export function dimStyle(dimmed: boolean): CSSProperties {
   };
 }
 
+// Sadece "the/a/an" atlanınca "The Out of Stock Snowboard" gibi başlıklar
+// "OO" (Out + of) gibi anlamsız rozetlere düşüyordu — yaygın bağlaçlar da
+// listeye eklendi. "&" gibi harf içermeyen kelimeler de atlanıyor, aksi
+// halde "Product & Co" → "P&" gibi çirkin bir sonuç çıkardı.
+const INITIALS_STOPWORDS = new Set([
+  "the", "a", "an", "of", "and", "or", "for", "with", "to", "in", "on", "at", "by",
+]);
+
 export function initials(title: string): string {
   const words = title
     .split(/\s+/)
-    .filter((w) => w.length > 0 && !["the", "a", "an"].includes(w.toLowerCase()));
-  const letters = words.slice(0, 2).map((w) => w[0]?.toUpperCase() ?? "");
+    .filter((w) => w.length > 0 && /[a-zA-Z]/.test(w) && !INITIALS_STOPWORDS.has(w.toLowerCase()));
+  const letters = words.slice(0, 2).map((w) => w.match(/[a-zA-Z]/)?.[0]?.toUpperCase() ?? "");
   return letters.join("") || "?";
 }
 
