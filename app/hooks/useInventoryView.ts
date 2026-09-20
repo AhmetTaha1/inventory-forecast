@@ -12,17 +12,28 @@ import {
 } from "../lib/inventory/constants";
 import type { Category, CategoryMetaMap, Filter } from "../types/inventory";
 
-// "Yukarı çık" / "geri bildirim" butonlarının viewport kenarına ne kadar
-// yakın duracağı. 44px hem ölçüm tamamlanana kadarki yedek değer HEM DE
-// düşülebilecek taban — kart viewport'a neredeyse tam yaslanmışsa (dar/orta
-// genişlikte pencere) ölçülen boşluk çok küçük çıkar ve buton tablo
-// metninin üzerine biner; bu yüzden asla 44px'in altına inmiyor. Sadece
-// gerçekten geniş ekranlarda (kart etrafında bariz boş alan varsa) ölçülen
-// daha büyük değere geçiliyor.
+// "Yukarı çık" / "geri bildirim" butonlarının konumlanma mantığı:
+// - Kartın etrafında butonu TAMAMEN dışarı, içerikle çakışmadan
+//   yerleştirecek kadar boşluk varsa (bkz. measure()), oraya yerleştirilir.
+// - Yoksa (dar/orta genişlikte pencere, mobil) eski, içerikle üst üste
+//   gelebilen ama aktif kaydırmada soluklaşan (bkz. isScrolling) güvenli
+//   konuma düşülür — bu yüzden 44 hem yedek hem de "sıkışık" taban değer.
 const FLOATING_BUTTON_DEFAULT_OFFSET = 44;
 // Butonlar, ürün listesi kartının kenarından bu kadar dışarı taşıyor —
 // tam kenara yapışık değil ama ona görünüşte "ait" duruyor.
 const FLOATING_BUTTON_EDGE_GAP = 8;
+// "Yukarı çık" her zaman 48x48 dairesel — sağ tarafta Shopify'ın kendi
+// arayüzünden (nav menüsü sadece SOLDA var) hiçbir risk yok, bu yüzden eşik
+// düşük tutulabilir: az bir boşluk bile "dışarı" yerleştirmek için yeterli.
+const SCROLL_TOP_BUTTON_SIZE = 48;
+const RIGHT_OUTSIDE_MIN_MARGIN = SCROLL_TOP_BUTTON_SIZE + FLOATING_BUTTON_EDGE_GAP + FLOATING_BUTTON_DEFAULT_OFFSET;
+// Geri bildirim butonunun pil genişliği metne göre değişiyor (tr/en), tam
+// ölçüm yerine güvenli bir üst sınır kullanılıyor. SOLDA Shopify'ın kendi
+// nav menüsü olduğu için eşik bilerek çok daha yüksek: dar/orta genişlikte
+// "boşluk" aslında menüyle içerik arasındaki dar pay olabilir, oraya
+// yerleştirmek butonu Shopify'ın kendi menüsünün üzerine bindirebilirdi.
+const FEEDBACK_BUTTON_ESTIMATED_WIDTH = 200;
+const LEFT_OUTSIDE_MIN_MARGIN = FEEDBACK_BUTTON_ESTIMATED_WIDTH + FLOATING_BUTTON_EDGE_GAP + 400;
 
 type InventoryItem = any;
 
@@ -64,9 +75,14 @@ export function useInventoryView({
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [isScrolling, setIsScrolling] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
+  // "Cramped" (sıkışık): butonu içeriğin tamamen dışına, çakışmadan
+  // koyacak kadar boşluk yok demek — bu durumda eski, kaydırmada
+  // soluklaşan güvenli davranışa dönülüyor (bkz. isScrolling kullanımı).
   const [floatingOffsets, setFloatingOffsets] = useState({
     left: FLOATING_BUTTON_DEFAULT_OFFSET,
     right: FLOATING_BUTTON_DEFAULT_OFFSET,
+    leftCramped: true,
+    rightCramped: true,
   });
 
   useEffect(() => {
@@ -105,14 +121,28 @@ export function useInventoryView({
   // 44px'ten konumlanıyordu — geniş (ör. 27") ekranlarda Shopify admin
   // içeriği ortada dar bir sütunda kalırken butonlar ekranın en uçlarında,
   // içerikten kopuk duruyordu. Artık ürün listesi kartının GERÇEK kenarına
-  // göre ölçülüyor, hangi ekran genişliğinde olursa olsun içeriğe yakın kalır.
+  // göre ölçülüyor: yeterince boşluk varsa butonlar içeriğin TAMAMEN
+  // dışına (çakışmadan) yerleştiriliyor; yoksa eski, kaydırmada soluklaşan
+  // güvenli konuma düşülüyor (bkz. "cramped").
   useEffect(() => {
     function measure() {
       const rect = listRef.current?.getBoundingClientRect();
       if (!rect) return;
+
+      const marginLeft = rect.left;
+      const marginRight = window.innerWidth - rect.right;
+      const rightCramped = marginRight < RIGHT_OUTSIDE_MIN_MARGIN;
+      const leftCramped = marginLeft < LEFT_OUTSIDE_MIN_MARGIN;
+
       setFloatingOffsets({
-        left: Math.max(FLOATING_BUTTON_DEFAULT_OFFSET, rect.left - FLOATING_BUTTON_EDGE_GAP),
-        right: Math.max(FLOATING_BUTTON_DEFAULT_OFFSET, window.innerWidth - rect.right - FLOATING_BUTTON_EDGE_GAP),
+        left: leftCramped
+          ? FLOATING_BUTTON_DEFAULT_OFFSET
+          : marginLeft - FEEDBACK_BUTTON_ESTIMATED_WIDTH - FLOATING_BUTTON_EDGE_GAP,
+        right: rightCramped
+          ? FLOATING_BUTTON_DEFAULT_OFFSET
+          : marginRight - SCROLL_TOP_BUTTON_SIZE - FLOATING_BUTTON_EDGE_GAP,
+        leftCramped,
+        rightCramped,
       });
     }
     measure();
@@ -266,10 +296,12 @@ export function useInventoryView({
     color: "#FFFFFF",
     cursor: "pointer",
     boxShadow: "0 4px 14px rgba(0,0,0,0.25)",
-    // Aktif kaydırma sırasında soluklaşıp küçülüyor (bkz. yukarıdaki not).
-    opacity: isScrolling ? 0.35 : 1,
-    transform: isScrolling ? "scale(0.85)" : "scale(1)",
-    pointerEvents: isScrolling ? "none" : "auto",
+    // Sadece "cramped" durumda (içeriğin dışına sığmıyorsa) aktif
+    // kaydırmada soluklaşıyor — dışarı yerleşebildiğinde zaten hiçbir
+    // satırın üzerine gelmiyor, soluklaşmaya gerek yok.
+    opacity: isScrolling && floatingOffsets.rightCramped ? 0.35 : 1,
+    transform: isScrolling && floatingOffsets.rightCramped ? "scale(0.85)" : "scale(1)",
+    pointerEvents: isScrolling && floatingOffsets.rightCramped ? "none" : "auto",
   };
 
   return {
@@ -300,6 +332,6 @@ export function useInventoryView({
     filterContextLabel,
     scrollTopButtonStyle,
     feedbackLeftOffset: floatingOffsets.left,
-    isScrolling,
+    feedbackIsDimming: isScrolling && floatingOffsets.leftCramped,
   };
 }
