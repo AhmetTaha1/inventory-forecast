@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import type { Dictionary, Locale } from "../../lib/translations";
 import type { Category, CategoryMetaMap } from "../../types/inventory";
 import { initials, productAdminId, rateText } from "../../lib/inventory/format";
-import { CellLabel, RunwayCell, StatusPill } from "./Cells";
+import { CellLabel, RunwayCell, StatusPill, TrendArrow } from "./Cells";
 
 type ProductRowProps = {
   item: any;
@@ -124,6 +124,7 @@ export function ProductRow({ item, category, categoryMeta, t, locale }: ProductR
         <CellLabel>{t.colRate}</CellLabel>
         <span style={{ fontSize: 13.5, fontWeight: 600, color: "#1A1A1A" }}>
           {rateText(item.dailyRate, t)}
+          <TrendArrow trend={item.trend} t={t} />
         </span>
       </div>
 

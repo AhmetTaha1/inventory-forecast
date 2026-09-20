@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import type { Dictionary, Locale } from "../../lib/translations";
+import type { Trend } from "../../lib/forecast";
 import type { Category, CategoryMetaMap } from "../../types/inventory";
 import { confidenceText, stockoutDateText } from "../../lib/inventory/format";
 
@@ -32,6 +33,34 @@ export function StatusPill(props: { category: Category; categoryMeta: CategoryMe
 
 export function CellLabel(props: { children: ReactNode }) {
   return <span className="invf-label">{props.children}</span>;
+}
+
+// Son 7 gün / önceki 7 gün karşılaştırmasına dayanan basit trend oku.
+// Yeterli veri yoksa (trend null) hiçbir şey render etmiyor.
+const TREND_STYLE: { [K in Trend]: { arrow: string; color: string } } = {
+  up: { arrow: "↑", color: "#0C5132" },
+  down: { arrow: "↓", color: "#B98900" },
+  flat: { arrow: "→", color: "#6B6B6B" },
+};
+
+export function TrendArrow(props: { trend: Trend | null; t: Dictionary }) {
+  if (!props.trend) return null;
+  const { arrow, color } = TREND_STYLE[props.trend];
+  const label = {
+    up: props.t.trendUpLabel,
+    down: props.t.trendDownLabel,
+    flat: props.t.trendFlatLabel,
+  }[props.trend];
+
+  return (
+    <span
+      style={{ marginLeft: 6, fontWeight: 800, color }}
+      title={label}
+      aria-label={label}
+    >
+      {arrow}
+    </span>
+  );
 }
 
 export function RunwayCell(props: { days: number; confidence: string; t: Dictionary; locale: Locale }) {

@@ -107,6 +107,11 @@ export type Dictionary = {
     ratePerMonth: (n: number) => string;
     rateLessThanOnePerMonth: string;
 
+    // ---- Satış trendi (son 7 gün vs önceki 7 gün) ----
+    trendUpLabel: string;
+    trendDownLabel: string;
+    trendFlatLabel: string;
+
     // ---- Boş durumlar ----
     emptyNoProductsTitle: string;
     emptyNoProductsDesc: string;
@@ -227,6 +232,10 @@ const tr: Dictionary = {
     ratePerMonth: (n) => `Ayda ~${n} adet`,
     rateLessThanOnePerMonth: "Ayda 1'den az",
 
+    trendUpLabel: "Satışlar artıyor (son 7 gün, önceki 7 güne göre)",
+    trendDownLabel: "Satışlar yavaşlıyor (son 7 gün, önceki 7 güne göre)",
+    trendFlatLabel: "Satışlar sabit (son 7 gün, önceki 7 güne göre)",
+
     emptyNoProductsTitle: "Gösterilecek ürün yok",
     emptyNoProductsDesc:
         "Stok takibi açık bir ürün bulunamadı. Shopify'da ürünlerinizin stok takibinin açık olduğundan emin olun, sonra verileri yenileyin.",
@@ -342,6 +351,10 @@ const en: Dictionary = {
     ratePerWeek: (n) => `~${n} units/week`,
     ratePerMonth: (n) => `~${n} units/month`,
     rateLessThanOnePerMonth: "Less than 1/month",
+
+    trendUpLabel: "Sales are trending up (last 7 days vs. previous 7 days)",
+    trendDownLabel: "Sales are slowing down (last 7 days vs. previous 7 days)",
+    trendFlatLabel: "Sales are steady (last 7 days vs. previous 7 days)",
 
     emptyNoProductsTitle: "No products to show",
     emptyNoProductsDesc:
