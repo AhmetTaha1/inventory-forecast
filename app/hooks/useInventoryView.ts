@@ -5,6 +5,7 @@ import { intlLocale, type Dictionary, type Locale } from "../lib/translations";
 import { buildExportRows, downloadXlsx, slugifyFilterName } from "../lib/inventory/export";
 import {
   PAGE_SIZE,
+  SCROLL_IDLE_DELAY_MS,
   SCROLL_TOP_THRESHOLD,
   SEARCH_DEBOUNCE_MS,
   URGENT_DAYS,
@@ -61,6 +62,7 @@ export function useInventoryView({
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
   const [showScrollTop, setShowScrollTop] = useState(false);
+  const [isScrolling, setIsScrolling] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
   const [floatingOffsets, setFloatingOffsets] = useState({
     left: FLOATING_BUTTON_DEFAULT_OFFSET,
@@ -76,13 +78,27 @@ export function useInventoryView({
   }, [queryInput]);
 
   // Belli bir miktar aşağı kaydırılınca "yukarı çık" butonu beliriyor.
+  // Ayrıca: floating butonlar (bkz. render) aktif kaydırma sırasında
+  // soluklaşıp küçülüyor, kaydırma bittikten SCROLL_IDLE_DELAY_MS sonra
+  // normale dönüyor — kayan bir liste satırının metnini tamamen kapatmasın
+  // diye. Kaydırırken zaten o satırı okumuyorsun; durduğunda çoğunlukla
+  // buton farklı bir satırın hizasında oluyor.
   useEffect(() => {
+    let idleTimer: ReturnType<typeof setTimeout>;
     function handleScroll() {
       setShowScrollTop(window.scrollY > SCROLL_TOP_THRESHOLD);
+      setIsScrolling(true);
+      clearTimeout(idleTimer);
+      idleTimer = setTimeout(() => setIsScrolling(false), SCROLL_IDLE_DELAY_MS);
     }
+    // İlk konum kontrolü — sayfa yüklendiğinde zaten kaydırılmış olabilir
+    // (örn. geri tuşu). "isScrolling"i tetiklemiyor, sadece görünürlüğü.
+    setShowScrollTop(window.scrollY > SCROLL_TOP_THRESHOLD);
     window.addEventListener("scroll", handleScroll, { passive: true });
-    handleScroll();
-    return () => window.removeEventListener("scroll", handleScroll);
+    return () => {
+      window.removeEventListener("scroll", handleScroll);
+      clearTimeout(idleTimer);
+    };
   }, []);
 
   // "Yukarı çık" / "geri bildirim" butonları önceden viewport kenarına sabit
@@ -250,6 +266,10 @@ export function useInventoryView({
     color: "#FFFFFF",
     cursor: "pointer",
     boxShadow: "0 4px 14px rgba(0,0,0,0.25)",
+    // Aktif kaydırma sırasında soluklaşıp küçülüyor (bkz. yukarıdaki not).
+    opacity: isScrolling ? 0.35 : 1,
+    transform: isScrolling ? "scale(0.85)" : "scale(1)",
+    pointerEvents: isScrolling ? "none" : "auto",
   };
 
   return {
@@ -280,5 +300,6 @@ export function useInventoryView({
     filterContextLabel,
     scrollTopButtonStyle,
     feedbackLeftOffset: floatingOffsets.left,
+    isScrolling,
   };
 }

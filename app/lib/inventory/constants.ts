@@ -17,6 +17,12 @@ export const SEARCH_DEBOUNCE_MS = 220;
 // "Yukarı çık" butonunun belirmesi için gereken kaydırma miktarı (piksel).
 export const SCROLL_TOP_THRESHOLD = 400;
 
+// Yüzen butonlar (Feedback / Yukarı çık) aktif kaydırma sırasında soluklaşıp
+// küçülüyor — kaydırma bittikten bu kadar süre sonra normale dönüyorlar.
+// Amaç: floating buton, kayan bir liste satırının üzerinden geçerken metni
+// tamamen kapatmasın (bkz. useInventoryView.ts).
+export const SCROLL_IDLE_DELAY_MS = 250;
+
 export const CATEGORY_ORDER: Category[] = ["out", "soon", "dead", "nodata"];
 
 // "Tüm ürünler" kartının rengi — herhangi bir kategoriyle çakışmasın diye
