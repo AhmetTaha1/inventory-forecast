@@ -11,6 +11,26 @@ export type Confidence = "normal" | "low" | "insufficient";
 // --- Trend oku: son 7 gün, önceki 7 güne göre nasıl? ---
 export type Trend = "up" | "down" | "flat";
 
+// --- YENİ: Tedarik süresi + sipariş kapsama günü ---
+// leadTimeDays: sipariş verdikten kaç gün sonra yeni stok elinize ulaşıyor.
+// coverageDays: yeni stok geldiğinde, KAÇ GÜNLÜK talebi daha karşılamak
+// istediğiniz (güvenlik payı gibi düşünülebilir).
+// Varsayılanlar, ShopSettings hiç ayarlanmamış mağazalar için önceki
+// sabit davranışı (REORDER_ALERT_DAYS = 14) birebir koruyor — hiçbir
+// mevcut mağazanın davranışı bu özellik eklendiği için değişmiyor.
+export const DEFAULT_LEAD_TIME_DAYS = 14;
+export const DEFAULT_COVERAGE_DAYS = 30;
+
+export type ReorderSettings = {
+    leadTimeDays: number;
+    coverageDays: number;
+};
+
+const DEFAULT_REORDER_SETTINGS: ReorderSettings = {
+    leadTimeDays: DEFAULT_LEAD_TIME_DAYS,
+    coverageDays: DEFAULT_COVERAGE_DAYS,
+};
+
 // --- Elenme sebebi: motora hiç girmeyen varyantlar için ---
 export type ExclusionReason = "gift_card" | "archived" | "not_tracked";
 
@@ -28,6 +48,10 @@ export type VariantForecast = {
     method: string; // ör. "weighted_average" — kullanıcıya dürüstçe gösterilecek (Bölüm 15)
     imageUrl: string | null; // <-- YENİ: ürünün öne çıkan görseli, yoksa null
     trend: Trend | null; // <-- YENİ: null = trend okuyacak kadar veri yok
+    // YENİ (tedarik süresi): ikisi de null = satış hızı hesaplanamadığı
+    // için (insufficient_data) öneri de üretilemiyor.
+    reorderByDays: number | null; // negatifse: sipariş için ZATEN gecikilmiş demek
+    suggestedReorderQty: number | null; // leadTime + coverage süresini karşılayacak, mevcut stok düşülmüş miktar
 };
 
 export type ForecastResult = {
@@ -148,8 +172,14 @@ function computeTrend(sales: VariantSales | undefined, now: Date): Trend | null 
     return "flat";
 }
 
-// --- Ana giriş noktası. `now` test edilebilirlik için parametre — vermezsen bugünün tarihi kullanılır. ---
-export function computeForecast(snapshot: SalesSnapshot, now: Date = new Date()): ForecastResult {
+// --- Ana giriş noktası. `now` test edilebilirlik için parametre — vermezsen
+// bugünün tarihi kullanılır. `settings` verilmezse önceki sabit davranış
+// (14 günlük eşik) korunur — bkz. DEFAULT_REORDER_SETTINGS. ---
+export function computeForecast(
+    snapshot: SalesSnapshot,
+    now: Date = new Date(),
+    settings: ReorderSettings = DEFAULT_REORDER_SETTINGS,
+): ForecastResult {
     const forecasts: VariantForecast[] = [];
     const excluded: ForecastResult["excluded"] = [];
 
@@ -169,8 +199,14 @@ export function computeForecast(snapshot: SalesSnapshot, now: Date = new Date())
         const confidence = computeConfidence(sales, now);
         const oneOffDetected = detectOneOff(sales);
 
+        // YENİ (tedarik süresi): dailyRate artık stok 0 olsa bile (veri
+        // yeterliyse) hesaplanıyor — aksi halde tükenmiş bir ürün için
+        // "ne kadar sipariş vermeliyim" tahmini asla üretilemezdi, oysa
+        // bu tam olarak en çok ihtiyaç duyulan an.
+        let dailyRate: number | null =
+            confidence === "insufficient" ? null : computeDailyRate(sales, now, oneOffDetected);
+
         // YENİ (Adım 7): üç durum sırayla kontrol edilir.
-        let dailyRate: number | null = null;
         let stockoutInDays: number | null = null;
         let method: string;
 
@@ -181,18 +217,27 @@ export function computeForecast(snapshot: SalesSnapshot, now: Date = new Date())
         } else if (confidence === "insufficient") {
             // Veri yetersiz (Hydrogen dahil). Dürüstçe null bırakılıyor, hesap denenmiyor.
             method = "insufficient_data";
+        } else if (dailyRate && dailyRate > 0) {
+            stockoutInDays = Math.round((v.available / dailyRate) * 10) / 10;
+            method = "weighted_average";
         } else {
-            dailyRate = computeDailyRate(sales, now, oneOffDetected);
-            if (dailyRate && dailyRate > 0) {
-                stockoutInDays = Math.round((v.available / dailyRate) * 10) / 10;
-                method = "weighted_average";
-            } else {
-                // Videographer tuzağı: veri geçmişi yeterli ama son dönemde hiç satış yok.
-                // "Hızlı satıyor" yalanı yerine dürüst sinyal.
-                dailyRate = 0;
-                method = "no_recent_sales";
-            }
+            // Videographer tuzağı: veri geçmişi yeterli ama son dönemde hiç satış yok.
+            // "Hızlı satıyor" yalanı yerine dürüst sinyal.
+            dailyRate = 0;
+            method = "no_recent_sales";
         }
+
+        // YENİ (tedarik süresi): "ne zaman sipariş vermeliyim" ve "ne
+        // kadar" — ikisi de dailyRate/stockoutInDays hesaplanabildiği
+        // sürece üretiliyor, aksi halde (insufficient_data) null kalıyor.
+        const reorderByDays =
+            stockoutInDays != null
+                ? Math.round((stockoutInDays - settings.leadTimeDays) * 10) / 10
+                : null;
+        const suggestedReorderQty =
+            dailyRate != null && dailyRate > 0
+                ? Math.max(0, Math.ceil(dailyRate * (settings.leadTimeDays + settings.coverageDays) - v.available))
+                : null;
 
         forecasts.push({
             variantId: v.variantId,
@@ -208,6 +253,8 @@ export function computeForecast(snapshot: SalesSnapshot, now: Date = new Date())
             method,
             imageUrl: v.imageUrl, // <-- YENİ
             trend: computeTrend(sales, now), // <-- YENİ
+            reorderByDays, // <-- YENİ
+            suggestedReorderQty, // <-- YENİ
         });
     }
 

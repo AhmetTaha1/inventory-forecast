@@ -47,6 +47,7 @@ type UseInventoryViewArgs = {
   locale: Locale;
   t: Dictionary;
   categoryMeta: CategoryMetaMap;
+  hasReorderSettings: boolean;
 };
 
 // Sayfanın tüm state/filtre/sayfalama/export mantığı burada toplanıyor —
@@ -61,6 +62,7 @@ export function useInventoryView({
   locale,
   t,
   categoryMeta,
+  hasReorderSettings,
 }: UseInventoryViewArgs) {
   const navigate = useNavigate();
   const navigation = useNavigation();
@@ -243,7 +245,7 @@ export function useInventoryView({
   }
 
   function handleExport() {
-    const rows = buildExportRows(filteredRows, t, locale, categoryMeta);
+    const rows = buildExportRows(filteredRows, t, locale, categoryMeta, hasReorderSettings);
     const label = slugifyFilterName(filter, t, categoryMeta);
     const dateStr = new Date().toISOString().slice(0, 10);
     downloadXlsx(rows, `${t.filenamePrefix}-${label}-${dateStr}.xlsx`);

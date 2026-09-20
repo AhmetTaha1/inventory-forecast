@@ -63,9 +63,33 @@ export function TrendArrow(props: { trend: Trend | null; t: Dictionary }) {
   );
 }
 
-export function RunwayCell(props: { days: number; confidence: string; t: Dictionary; locale: Locale }) {
-  const { days, t, locale } = props;
+export function RunwayCell(props: {
+  days: number;
+  confidence: string;
+  t: Dictionary;
+  locale: Locale;
+  // Sipariş ayarları yapılmışsa dolu, yoksa null (bkz. ProductRow.tsx).
+  reorderQty?: number | null;
+  reorderByDays?: number | null;
+}) {
+  const { days, t, locale, reorderQty, reorderByDays } = props;
   const note = confidenceText(props.confidence, t);
+
+  // Tedarik süresi ayarlandıysa: önerilen miktar + (varsa) "süre geçti"
+  // uyarısı. İkisi de RunwayCell'in iki dalı (bugün / gelecek bir gün)
+  // arasında ortak, tekrar yazmamak için burada tek seferlik hazırlanıyor.
+  const reorderInfo = (
+    <>
+      {reorderQty != null && reorderQty > 0 && (
+        <span className="invf-sub">{t.reorderQtySuggestion(reorderQty)}</span>
+      )}
+      {reorderByDays != null && reorderByDays <= 0 && (
+        <span className="invf-note" style={{ color: "#C4210B" }}>
+          {t.reorderOverdueNote}
+        </span>
+      )}
+    </>
+  );
 
   // 0 güne yuvarlanan tahmin "≈0 gün sonra" olarak okunuyordu; düz cümleye çevrildi.
   if (days <= 0) {
@@ -75,6 +99,7 @@ export function RunwayCell(props: { days: number; confidence: string; t: Diction
           {t.runwayToday}
         </span>
         {note && <span className="invf-note">{note}</span>}
+        {reorderInfo}
       </div>
     );
   }
@@ -90,6 +115,7 @@ export function RunwayCell(props: { days: number; confidence: string; t: Diction
       </span>
       <span className="invf-sub">{t.runwayAround(stockoutDateText(days, locale))}</span>
       {note && <span className="invf-note">{note}</span>}
+      {reorderInfo}
     </div>
   );
 }

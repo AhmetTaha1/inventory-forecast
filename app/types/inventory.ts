@@ -11,4 +11,4 @@ export type CategoryMeta = {
 
 export type CategoryMetaMap = { [K in Category]: CategoryMeta };
 
-export type AlertTone = "critical" | "warning" | "success";
+export type AlertTone = "critical" | "warning" | "success" | "info";

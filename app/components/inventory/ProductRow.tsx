@@ -10,15 +10,27 @@ type ProductRowProps = {
   categoryMeta: CategoryMetaMap;
   t: Dictionary;
   locale: Locale;
+  // Sipariş ayarları (tedarik süresi) hiç yapılmamışsa false — bu durumda
+  // hiç ayarlanmamış varsayılan değerlere göre üretilmiş öneriler
+  // gösterilmiyor (bkz. app._index.tsx loader'daki hasReorderSettings notu).
+  showReorderSuggestion: boolean;
 };
 
-export function ProductRow({ item, category, categoryMeta, t, locale }: ProductRowProps) {
+export function ProductRow({ item, category, categoryMeta, t, locale, showReorderSuggestion }: ProductRowProps) {
   const meta = categoryMeta[category];
+
+  const reorderQty: number | null = showReorderSuggestion ? item.suggestedReorderQty : null;
+  const reorderByDays: number | null = showReorderSuggestion ? item.reorderByDays : null;
 
   let runway: ReactNode;
   if (category === "out") {
     runway = (
-      <span style={{ fontSize: 14, fontWeight: 700, color: "#D72C0D" }}>{t.outRunway}</span>
+      <div>
+        <span style={{ fontSize: 14, fontWeight: 700, color: "#D72C0D" }}>{t.outRunway}</span>
+        {reorderQty != null && reorderQty > 0 && (
+          <span className="invf-sub">{t.reorderQtySuggestion(reorderQty)}</span>
+        )}
+      </div>
     );
   } else if (category === "soon" && item.stockoutInDays != null) {
     runway = (
@@ -27,6 +39,8 @@ export function ProductRow({ item, category, categoryMeta, t, locale }: ProductR
         confidence={String(item.confidence ?? "")}
         t={t}
         locale={locale}
+        reorderQty={reorderQty}
+        reorderByDays={reorderByDays}
       />
     );
   } else if (category === "dead") {
