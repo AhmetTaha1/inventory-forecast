@@ -195,8 +195,11 @@ type FeedbackButtonProps = {
   // sol boşluk (bkz. useInventoryView.ts). Verilmezse CSS'teki 44px
   // varsayılanı kullanılır — mobilde zaten !important kuralı bunu eziyor.
   leftOffset?: number;
-  // Aktif kaydırma sırasında true — buton soluklaşıp küçülür, altındaki
-  // liste satırının metnini tamamen kapatmasın diye (bkz. useInventoryView.ts).
+  // İçeriğin dışına sığmıyorsa (ör. mobil) true — bu durumda buton
+  // DURGUNKEN bile hafif saydam kalır, kullanıcı o satırı okumak
+  // isteyebileceği için (bkz. useInventoryView.ts).
+  isCramped?: boolean;
+  // Aktif kaydırma sırasında true — cramped ise ekstra soluklaşıp küçülür.
   isScrolling?: boolean;
 };
 
@@ -280,9 +283,9 @@ export function FeedbackButton(props: FeedbackButtonProps) {
         className="invf-fb-trigger"
         style={{
           left: props.leftOffset,
-          opacity: props.isScrolling ? 0.35 : 1,
-          transform: props.isScrolling ? "scale(0.85)" : "scale(1)",
-          pointerEvents: props.isScrolling ? "none" : "auto",
+          opacity: !props.isCramped ? 1 : props.isScrolling ? 0.3 : 0.55,
+          transform: props.isScrolling && props.isCramped ? "scale(0.85)" : "scale(1)",
+          pointerEvents: props.isScrolling && props.isCramped ? "none" : "auto",
         }}
         onClick={() => setOpen(true)}
         aria-label={t.feedbackTrigger}
