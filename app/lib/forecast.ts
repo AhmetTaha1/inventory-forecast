@@ -8,6 +8,9 @@ import type { SalesSnapshot, VariantInfo, VariantSales } from "./sales.server";
 // --- Güven seviyesi (Bölüm 15, Karar 3) ---
 export type Confidence = "normal" | "low" | "insufficient";
 
+// --- Trend oku: son 7 gün, önceki 7 güne göre nasıl? ---
+export type Trend = "up" | "down" | "flat";
+
 // --- Elenme sebebi: motora hiç girmeyen varyantlar için ---
 export type ExclusionReason = "gift_card" | "archived" | "not_tracked";
 
@@ -24,6 +27,7 @@ export type VariantForecast = {
     available: number;
     method: string; // ör. "weighted_average" — kullanıcıya dürüstçe gösterilecek (Bölüm 15)
     imageUrl: string | null; // <-- YENİ: ürünün öne çıkan görseli, yoksa null
+    trend: Trend | null; // <-- YENİ: null = trend okuyacak kadar veri yok
 };
 
 export type ForecastResult = {
@@ -115,6 +119,35 @@ function computeDailyRate(sales: VariantSales | undefined, now: Date, excludeOne
     return weightedSum; // ağırlıklar zaten toplamda 1.0
 }
 
+// --- YENİ: trend oku. Son 7 gün ile ondan önceki 7 günü karşılaştırır. ---
+// %15'ten küçük değişim gürültü sayılır ve "sabit" (flat) olarak işaretlenir —
+// aksi halde 3 satışın 4'e çıkması bile "artıyor" gösterip anlamsız gürültü yaratır.
+const TREND_WINDOW_DAYS = 7;
+const TREND_CHANGE_THRESHOLD = 0.15;
+
+function sumUnitsInAgeRange(sales: VariantSales, now: Date, minAgeInclusive: number, maxAgeExclusive: number): number {
+    let sum = 0;
+    for (const [day, qty] of Object.entries(sales.byDay)) {
+        const age = daysSince(day, now);
+        if (age >= minAgeInclusive && age < maxAgeExclusive) sum += qty;
+    }
+    return sum;
+}
+
+function computeTrend(sales: VariantSales | undefined, now: Date): Trend | null {
+    if (!sales) return null;
+    const recent = sumUnitsInAgeRange(sales, now, 0, TREND_WINDOW_DAYS);
+    const previous = sumUnitsInAgeRange(sales, now, TREND_WINDOW_DAYS, TREND_WINDOW_DAYS * 2);
+
+    if (recent === 0 && previous === 0) return null; // karşılaştıracak veri yok
+    if (previous === 0) return recent > 0 ? "up" : "flat";
+
+    const change = (recent - previous) / previous;
+    if (change > TREND_CHANGE_THRESHOLD) return "up";
+    if (change < -TREND_CHANGE_THRESHOLD) return "down";
+    return "flat";
+}
+
 // --- Ana giriş noktası. `now` test edilebilirlik için parametre — vermezsen bugünün tarihi kullanılır. ---
 export function computeForecast(snapshot: SalesSnapshot, now: Date = new Date()): ForecastResult {
     const forecasts: VariantForecast[] = [];
@@ -174,6 +207,7 @@ export function computeForecast(snapshot: SalesSnapshot, now: Date = new Date())
             available: v.available,
             method,
             imageUrl: v.imageUrl, // <-- YENİ
+            trend: computeTrend(sales, now), // <-- YENİ
         });
     }
 

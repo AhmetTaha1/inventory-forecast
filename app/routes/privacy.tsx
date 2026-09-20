@@ -49,7 +49,7 @@ export default function PrivacyPolicy() {
 
         <p>
           This Privacy Policy explains what data the Inventory Forecast
-          Shopify app ("the App", "we", "us") accesses, why, and how it is
+          Shopify app (&ldquo;the App&rdquo;, &ldquo;we&rdquo;, &ldquo;us&rdquo;) accesses, why, and how it is
           handled. The App is used inside the Shopify admin by merchants who
           install it.
         </p>
@@ -60,7 +60,7 @@ export default function PrivacyPolicy() {
           <li>Product and variant titles, status, and featured images</li>
           <li>Inventory levels across your locations</li>
           <li>Order line items and timestamps, used only in aggregate (units sold per day) to calculate sales velocity — we do not access customer names, emails, addresses, or payment information</li>
-          <li>Your store's timezone (to align daily sales totals to your local day)</li>
+          <li>Your store&apos;s timezone (to align daily sales totals to your local day)</li>
         </ul>
         <p>
           The App requests only the Shopify API scopes it actually uses:
@@ -73,7 +73,7 @@ export default function PrivacyPolicy() {
           <li><strong>Access token &amp; shop domain</strong> — required to authenticate API requests on your behalf while the App is installed.</li>
           <li><strong>Cached forecast snapshot</strong> — an aggregated summary (product names, stock counts, computed forecasts) recalculated periodically, stored per shop to avoid re-fetching your entire catalog on every page load.</li>
         </ul>
-        <p>We do not store your customers' personal data. No individual customer record ever enters our database.</p>
+        <p>We do not store your customers&apos; personal data. No individual customer record ever enters our database.</p>
 
         <h2>3. Optional Feedback Form</h2>
         <p>
@@ -81,7 +81,7 @@ export default function PrivacyPolicy() {
           first name, last name, email, and message you provide are sent
           directly from your browser to our form-processing provider,{" "}
           <a href="https://web3forms.com" target="_blank" rel="noreferrer">Web3Forms</a>,
-          which delivers it to us by email. This data is not stored in the App's own database.
+          which delivers it to us by email. This data is not stored in the App&apos;s own database.
           Submitting feedback is entirely optional.
         </p>
 
@@ -89,7 +89,7 @@ export default function PrivacyPolicy() {
         <p>
           When you uninstall the App, your access token and cached forecast
           data are deleted immediately. In addition, the App implements
-          Shopify's mandatory compliance webhooks
+          Shopify&apos;s mandatory compliance webhooks
           (<code>customers/data_request</code>, <code>customers/redact</code>,{" "}
           <code>shop/redact</code>) to respond to data requests and ensure
           any remaining data is erased.
@@ -120,7 +120,7 @@ export default function PrivacyPolicy() {
         <h2>8. Changes to This Policy</h2>
         <p>
           We may update this policy from time to time. Material changes will
-          be reflected by updating the "Last updated" date above.
+          be reflected by updating the &ldquo;Last updated&rdquo; date above.
         </p>
 
         <h2>9. Contact Us</h2>
