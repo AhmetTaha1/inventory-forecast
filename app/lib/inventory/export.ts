@@ -58,17 +58,22 @@ function runwayCsvText(item: any, category: Category, t: Dictionary, locale: Loc
 
 // Sözlükteki `csvHeaders`/`csvOut` gibi alan adları tarihsel (bkz. yukarı) —
 // bu satırlar artık .xlsx dosyasının satırları, gerçek CSV metni değil.
+// includeReorderQty: sipariş ayarları (tedarik süresi) hiç yapılmamışsa
+// false — bu durumda "Önerilen sipariş" sütunu hiç eklenmiyor, ayarlanmamış
+// varsayılan değerlere göre üretilmiş bir öneri sessizce dışa aktarılmasın.
 export function buildExportRows(
   rows: Array<{ item: any; category: Category }>,
   t: Dictionary,
   locale: Locale,
   categoryMeta: CategoryMetaMap,
+  includeReorderQty: boolean,
 ): (string | number)[][] {
-  const data: (string | number)[][] = [t.csvHeaders];
+  const headers = includeReorderQty ? [...t.csvHeaders, t.csvReorderQtyHeader] : t.csvHeaders;
+  const data: (string | number)[][] = [headers];
 
   for (const { item, category } of rows) {
     const note = category === "soon" ? confidenceText(String(item.confidence ?? ""), t) ?? "" : "";
-    data.push([
+    const row: (string | number)[] = [
       item.productTitle ?? "",
       item.variantTitle && item.variantTitle !== "Default Title" ? item.variantTitle : "",
       categoryMeta[category].label,
@@ -76,7 +81,12 @@ export function buildExportRows(
       rateText(item.dailyRate, t),
       runwayCsvText(item, category, t, locale),
       note,
-    ]);
+    ];
+    if (includeReorderQty) {
+      const qty = item.suggestedReorderQty;
+      row.push(typeof qty === "number" && qty > 0 ? qty : "");
+    }
+    data.push(row);
   }
 
   return data;
@@ -85,12 +95,20 @@ export function buildExportRows(
 // Sütun genişlikleri sabit — "Ürün" ve "Not" en uzun içerikli sütunlar
 // olduğu için biraz daha geniş, "Stok" tek haneli/iki haneli sayılar
 // içerdiği için dar. Sıra buildExportRows'taki sütun sırasıyla birebir
-// eşleşmeli.
+// eşleşmeli. Son sütun ("Önerilen sipariş") includeReorderQty'ye göre
+// koşullu olduğu için ayrı ekleniyor.
 const EXPORT_COLUMN_WIDTHS = [{ wch: 28 }, { wch: 16 }, { wch: 14 }, { wch: 8 }, { wch: 16 }, { wch: 28 }, { wch: 32 }];
+const EXPORT_REORDER_QTY_COLUMN_WIDTH = { wch: 16 };
 
 export function downloadXlsx(rows: (string | number)[][], fileName: string) {
   const worksheet = XLSX.utils.aoa_to_sheet(rows);
-  worksheet["!cols"] = EXPORT_COLUMN_WIDTHS;
+  // Başlık satırındaki gerçek sütun sayısına göre genişlik uygulanıyor —
+  // "Önerilen sipariş" sütunu koşullu olduğu için sabit bir uzunluk varsaymıyoruz.
+  const columnCount = rows[0]?.length ?? EXPORT_COLUMN_WIDTHS.length;
+  worksheet["!cols"] =
+    columnCount > EXPORT_COLUMN_WIDTHS.length
+      ? [...EXPORT_COLUMN_WIDTHS, EXPORT_REORDER_QTY_COLUMN_WIDTH]
+      : EXPORT_COLUMN_WIDTHS;
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, worksheet, "Inventory");
   XLSX.writeFile(workbook, fileName);

@@ -40,3 +40,14 @@ model ForecastSnapshot {
   computedAt DateTime @default(now())
   lockedAt   DateTime?
 }
+
+// Tedarik süresi (lead time) + sipariş kapsama günü ayarları — mağaza
+// bazında, "sipariş ayarları" sihirbazından geliyor (bkz. shopSettings.server.ts).
+// onboardedAt null ise sihirbaz hiç tamamlanmamış demek; panelde bir
+// hatırlatma kartı gösterip göstermeyeceğimizi bununla belirliyoruz.
+model ShopSettings {
+  shop         String    @id
+  leadTimeDays Int       @default(14)
+  coverageDays Int       @default(30)
+  onboardedAt  DateTime?
+}

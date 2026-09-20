@@ -15,6 +15,7 @@ import { SummaryCard } from "../components/inventory/SummaryCard";
 import { AllProductsCard } from "../components/inventory/AllProductsCard";
 import { RefreshBar } from "../components/inventory/RefreshBar";
 import { ProductRow } from "../components/inventory/ProductRow";
+import { getShopSettings } from "../lib/shopSettings.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, session } = await authenticate.admin(request);
@@ -32,7 +33,21 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     forceRefresh,
   });
 
-  return { ...groups, computedAt: computedAt.toISOString(), fromCache, locale };
+  // YENİ (tedarik süresi): sipariş ayarları hiç yapılmamışsa (onboardedAt
+  // yok) panelde bir hatırlatma kartı gösteriyoruz VE ürün satırlarındaki
+  // sipariş miktarı önerilerini gizliyoruz — aksi halde hiç ayarlanmamış
+  // varsayılan (14 gün) değerlere göre üretilmiş bir sayı, kullanıcı bunu
+  // hiç görmeyi/onaylamayı seçmeden sessizce panelde belirirdi.
+  const shopSettings = await getShopSettings(session.shop);
+  const hasReorderSettings = shopSettings?.onboardedAt != null;
+
+  return {
+    ...groups,
+    computedAt: computedAt.toISOString(),
+    fromCache,
+    locale,
+    hasReorderSettings,
+  };
 };
 
 export default function Index() {
@@ -45,6 +60,7 @@ export default function Index() {
     computedAt,
     fromCache,
     locale,
+    hasReorderSettings,
   } = useLoaderData<typeof loader>();
 
   const t = getDictionary(locale);
@@ -89,6 +105,7 @@ export default function Index() {
     locale,
     t,
     categoryMeta,
+    hasReorderSettings,
   });
 
   return (
@@ -127,6 +144,21 @@ export default function Index() {
                   description={t.noReorderDescription(URGENT_DAYS)}
                 />
               )
+            )}
+
+            {/* Sipariş ayarları (tedarik süresi) hiç yapılmamışsa hatırlatma
+                kartı — tek seferlik, ayar yapılınca (onboardedAt set edilince)
+                bir daha hiç görünmüyor. Zorunlu bir yönlendirme/engelleme
+                DEĞİL: ücretsiz katmandaki hiçbir özellik buna bağlı değil,
+                sadece isteyen mağaza sahibi sipariş önerilerini açabiliyor. */}
+            {!hasReorderSettings && allRows.length > 0 && (
+              <AlertBox
+                tone="info"
+                title={t.onboardingPromptTitle}
+                description={t.onboardingPromptDesc}
+                actionLabel={t.onboardingPromptCta}
+                actionHref={`/app/settings${locale ? `?locale=${locale}` : ""}`}
+              />
             )}
 
             <div className="invf-summary">
@@ -219,6 +251,7 @@ export default function Index() {
                   categoryMeta={categoryMeta}
                   t={t}
                   locale={locale}
+                  showReorderSuggestion={hasReorderSettings}
                 />
               ))}
 

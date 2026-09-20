@@ -132,6 +132,7 @@ export type Dictionary = {
 
     // ---- CSV dışa aktarma ----
     csvHeaders: string[];
+    csvReorderQtyHeader: string;
     csvOut: string;
     csvDead: string;
     csvNoDataRunway: string;
@@ -159,6 +160,22 @@ export type Dictionary = {
     feedbackSuccessTitle: string;
     feedbackSuccessSubtitle: string;
     feedbackCloseButton: string;
+
+    // ---- Sipariş ayarları (tedarik süresi + kapsama günü) ----
+    reorderSettingsLinkLabel: string;
+    onboardingPromptTitle: string;
+    onboardingPromptDesc: string;
+    onboardingPromptCta: string;
+    settingsPageHeading: string;
+    settingsIntro: string;
+    leadTimeFieldLabel: string;
+    leadTimeFieldHelp: string;
+    coverageDaysFieldLabel: string;
+    coverageDaysFieldHelp: string;
+    settingsSaveButton: string;
+    settingsBackLink: string;
+    reorderQtySuggestion: (qty: number) => string;
+    reorderOverdueNote: string;
 };
 
 // ---------------------------------------------------------------------------
@@ -253,6 +270,7 @@ const tr: Dictionary = {
     scrollTopTitle: "Yukarı çık",
 
     csvHeaders: ["Ürün", "Varyant", "Durum", "Stok", "Satış Hızı", "Ne Zaman Biter", "Not"],
+    csvReorderQtyHeader: "Önerilen Sipariş",
     csvOut: "Stok bitti",
     csvDead: "Uzun süredir satılmıyor",
     csvNoDataRunway: "Tahmin için yeterli satış geçmişi yok",
@@ -279,6 +297,23 @@ const tr: Dictionary = {
     feedbackSuccessTitle: "Mesajınız iletildi",
     feedbackSuccessSubtitle: "En kısa sürede döneceğiz.",
     feedbackCloseButton: "Kapat",
+
+    reorderSettingsLinkLabel: "Sipariş ayarları",
+    onboardingPromptTitle: "Sipariş zamanlamanı netleştir",
+    onboardingPromptDesc:
+        "Tedarikçinden yeni stok kaç günde geliyor? Bunu bir kez ayarla, tam olarak ne zaman ve ne kadar sipariş vermen gerektiğini gösterelim.",
+    onboardingPromptCta: "Ayarları aç",
+    settingsPageHeading: "Sipariş ayarları",
+    settingsIntro:
+        "Bu iki bilgi, sipariş uyarılarının ve önerilen sipariş miktarlarının ne zaman/ne kadar olacağını belirler. İstediğin zaman değiştirebilirsin.",
+    leadTimeFieldLabel: "Tedarik süresi (gün)",
+    leadTimeFieldHelp: "Sipariş verdikten kaç gün sonra yeni stok elinize ulaşıyor?",
+    coverageDaysFieldLabel: "Sipariş kapsama günü",
+    coverageDaysFieldHelp: "Yeni stok geldiğinde, kaç günlük talebi daha karşılamak istersin?",
+    settingsSaveButton: "Kaydet ve panele dön",
+    settingsBackLink: "← Panele dön",
+    reorderQtySuggestion: (qty) => `~${qty} adet sipariş önerisi`,
+    reorderOverdueNote: "Sipariş için süre geçti — tedarik süresi göz önüne alındığında zaten geç kalınmış olabilir",
 };
 
 // ---------------------------------------------------------------------------
@@ -373,6 +408,7 @@ const en: Dictionary = {
     scrollTopTitle: "Back to top",
 
     csvHeaders: ["Product", "Variant", "Status", "Stock", "Sales Speed", "Runs Out", "Note"],
+    csvReorderQtyHeader: "Suggested Reorder",
     csvOut: "Out of stock",
     csvDead: "Not selling for a long time",
     csvNoDataRunway: "Not enough sales history for a forecast",
@@ -399,6 +435,23 @@ const en: Dictionary = {
     feedbackSuccessTitle: "Message sent",
     feedbackSuccessSubtitle: "We'll get back to you soon.",
     feedbackCloseButton: "Close",
+
+    reorderSettingsLinkLabel: "Reorder settings",
+    onboardingPromptTitle: "Set your reorder timing",
+    onboardingPromptDesc:
+        "How many days does it take your supplier to deliver new stock? Set this once, and we'll show you exactly when and how much to reorder.",
+    onboardingPromptCta: "Open settings",
+    settingsPageHeading: "Reorder settings",
+    settingsIntro:
+        "These two numbers decide when reorder alerts fire and how large the suggested order quantities are. You can change them anytime.",
+    leadTimeFieldLabel: "Lead time (days)",
+    leadTimeFieldHelp: "How many days after placing an order does new stock arrive?",
+    coverageDaysFieldLabel: "Order coverage (days)",
+    coverageDaysFieldHelp: "Once new stock arrives, how many more days of demand do you want it to cover?",
+    settingsSaveButton: "Save and return to dashboard",
+    settingsBackLink: "← Back to dashboard",
+    reorderQtySuggestion: (qty) => `~${qty} units suggested`,
+    reorderOverdueNote: "Past the reorder point — given your lead time, you may already be behind",
 };
 
 export const DICTS: Record<Locale, Dictionary> = { tr, en };
