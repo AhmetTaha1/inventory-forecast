@@ -146,8 +146,24 @@ export function useInventoryView({
       });
     }
     measure();
+    // Shopify'ın kendi web bileşenleri (<s-page> vb.) mount anında henüz
+    // tam yerleşmemiş olabilir — ilk ölçüm bu yüzden yanlış (dar) bir
+    // boşluk hesaplayıp butonu gereğinden fazla "sıkışık" işaretleyebilir,
+    // sonrasında pencere yeniden boyutlandırılmadan düzelmez. Layout
+    // oturduktan sonra bir kez daha ölçüyoruz.
+    const settleTimer = setTimeout(measure, 400);
+    // ResizeObserver, kartın GENİŞLİĞİ (dolayısıyla konumu) değiştiğinde
+    // tetikleniyor — nav menüsü açılıp kapandığında ya da Shopify admin
+    // kendi iç düzenini değiştirdiğinde de (pencere boyutu aynı kalsa
+    // bile) yeniden ölçüm yapılmasını sağlıyor.
+    const observer = listRef.current ? new ResizeObserver(measure) : null;
+    if (listRef.current && observer) observer.observe(listRef.current);
     window.addEventListener("resize", measure);
-    return () => window.removeEventListener("resize", measure);
+    return () => {
+      clearTimeout(settleTimer);
+      observer?.disconnect();
+      window.removeEventListener("resize", measure);
+    };
   }, []);
 
   function scrollToTop() {
@@ -296,10 +312,13 @@ export function useInventoryView({
     color: "#FFFFFF",
     cursor: "pointer",
     boxShadow: "0 4px 14px rgba(0,0,0,0.25)",
-    // Sadece "cramped" durumda (içeriğin dışına sığmıyorsa) aktif
-    // kaydırmada soluklaşıyor — dışarı yerleşebildiğinde zaten hiçbir
-    // satırın üzerine gelmiyor, soluklaşmaya gerek yok.
-    opacity: isScrolling && floatingOffsets.rightCramped ? 0.35 : 1,
+    // "Cramped" durumda (içeriğin dışına sığmıyorsa, ör. mobil) buton
+    // DURGUNKEN bile hafif saydam kalıyor — kullanıcı kaydırmayı durdurup
+    // tam o satırı okumak isteyebilir, tam opak bir buton bunu tamamen
+    // engellerdi. Aktif kaydırma sırasında ekstra soluklaşıp küçülüyor.
+    // Dışarı yerleşebildiğinde (cramped değilse) hiçbir satırın üzerine
+    // gelmediği için tamamen opak kalıyor.
+    opacity: !floatingOffsets.rightCramped ? 1 : isScrolling ? 0.3 : 0.55,
     transform: isScrolling && floatingOffsets.rightCramped ? "scale(0.85)" : "scale(1)",
     pointerEvents: isScrolling && floatingOffsets.rightCramped ? "none" : "auto",
   };
@@ -332,6 +351,7 @@ export function useInventoryView({
     filterContextLabel,
     scrollTopButtonStyle,
     feedbackLeftOffset: floatingOffsets.left,
-    feedbackIsDimming: isScrolling && floatingOffsets.leftCramped,
+    feedbackIsCramped: floatingOffsets.leftCramped,
+    isScrolling,
   };
 }
