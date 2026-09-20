@@ -84,9 +84,17 @@ const FEEDBACK_CSS = `
     width: 48px !important;
     height: 48px !important;
     padding: 0 !important;
+    /* Masaüstünde ikon, beyaz pilin içinde küçük yeşil bir rozetti.
+       Mobilde butonun TAMAMI daireye dönüştüğü için rozeti ayrı bir
+       daire olarak bırakmak "beyaz halka içinde yeşil nokta" gibi
+       çirkin bir görüntü veriyordu — artık butonun kendisi "yukarı çık"
+       butonuyla aynı dolgu yeşile boyanıyor, iç rozet şeffaflaşıyor. */
+    background: #008060 !important;
+    border-color: #008060 !important;
     justify-content: center !important;
   }
   .invf-fb-label { display: none; }
+  .invf-fb-icon-badge { background: transparent; width: auto; height: auto; }
 }
 
 .invf-fb-overlay {
