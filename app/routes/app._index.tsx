@@ -76,6 +76,7 @@ export default function Index() {
     subtitleParts,
     filterContextLabel,
     scrollTopButtonStyle,
+    feedbackLeftOffset,
   } = useInventoryView({
     outOfStock,
     soonToStockout,
@@ -301,7 +302,7 @@ export default function Index() {
           scroll etmeden erişilebilir. Kendi konumunu ve stilini kendi
           bileşen dosyasında (FeedbackButton.tsx) taşıyor. Dil, admin
           panelinin dilinden (locale) geliyor, kendi başına tespit etmiyor. */}
-      <FeedbackButton locale={locale} />
+      <FeedbackButton locale={locale} leftOffset={feedbackLeftOffset} />
 
       {showScrollTop && (
         <button
