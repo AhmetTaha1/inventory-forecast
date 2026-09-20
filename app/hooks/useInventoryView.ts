@@ -11,6 +11,15 @@ import {
 } from "../lib/inventory/constants";
 import type { Category, CategoryMetaMap, Filter } from "../types/inventory";
 
+// "Yukarı çık" / "geri bildirim" butonlarının viewport kenarına ne kadar
+// yakın duracağı. Ölçüm tamamlanana kadarki yedek değer + geniş
+// ekranlarda düşülebilecek en düşük taban.
+const FLOATING_BUTTON_DEFAULT_OFFSET = 44;
+const FLOATING_BUTTON_MIN_OFFSET = 16;
+// Butonlar, ürün listesi kartının kenarından bu kadar dışarı taşıyor —
+// tam kenara yapışık değil ama ona görünüşte "ait" duruyor.
+const FLOATING_BUTTON_EDGE_GAP = 8;
+
 type InventoryItem = any;
 
 type UseInventoryViewArgs = {
@@ -50,6 +59,10 @@ export function useInventoryView({
   const [page, setPage] = useState(1);
   const [showScrollTop, setShowScrollTop] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
+  const [floatingOffsets, setFloatingOffsets] = useState({
+    left: FLOATING_BUTTON_DEFAULT_OFFSET,
+    right: FLOATING_BUTTON_DEFAULT_OFFSET,
+  });
 
   useEffect(() => {
     const handle = setTimeout(() => {
@@ -67,6 +80,25 @@ export function useInventoryView({
     window.addEventListener("scroll", handleScroll, { passive: true });
     handleScroll();
     return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
+
+  // "Yukarı çık" / "geri bildirim" butonları önceden viewport kenarına sabit
+  // 44px'ten konumlanıyordu — geniş (ör. 27") ekranlarda Shopify admin
+  // içeriği ortada dar bir sütunda kalırken butonlar ekranın en uçlarında,
+  // içerikten kopuk duruyordu. Artık ürün listesi kartının GERÇEK kenarına
+  // göre ölçülüyor, hangi ekran genişliğinde olursa olsun içeriğe yakın kalır.
+  useEffect(() => {
+    function measure() {
+      const rect = listRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      setFloatingOffsets({
+        left: Math.max(FLOATING_BUTTON_MIN_OFFSET, rect.left - FLOATING_BUTTON_EDGE_GAP),
+        right: Math.max(FLOATING_BUTTON_MIN_OFFSET, window.innerWidth - rect.right - FLOATING_BUTTON_EDGE_GAP),
+      });
+    }
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
   }, []);
 
   function scrollToTop() {
@@ -195,14 +227,15 @@ export function useInventoryView({
     return parts.length > 0 ? parts.join(" · ") : t.allProductsTitle;
   })();
 
-  // Köşeye sıkışık durmasın, listeye biraz daha yakın dursun diye sağdan
-  // boşluk 24 yerine 44 — hâlâ sabit (fixed) ama tam köşede değil.
+  // Sağdan boşluk artık ürün listesi kartının gerçek kenarına göre ölçülüyor
+  // (bkz. yukarıdaki floatingOffsets effect'i) — hâlâ sabit (fixed) ama
+  // geniş ekranlarda içerikten kopup ekranın en ucuna yapışmıyor.
   const scrollTopButtonStyle: CSSProperties = {
     all: "unset",
     boxSizing: "border-box",
     position: "fixed",
     bottom: 32,
-    right: 44,
+    right: floatingOffsets.right,
     zIndex: 40,
     width: 48,
     height: 48,
@@ -243,5 +276,6 @@ export function useInventoryView({
     subtitleParts,
     filterContextLabel,
     scrollTopButtonStyle,
+    feedbackLeftOffset: floatingOffsets.left,
   };
 }

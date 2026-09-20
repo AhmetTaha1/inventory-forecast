@@ -59,6 +59,20 @@ const FEEDBACK_CSS = `
   box-shadow: 0 8px 20px rgba(0,0,0,0.22) !important;
 }
 
+/* Düz bir sohbet emojisi yerine, uygulamanın geri kalanındaki (özet
+   kartları, "yukarı çık" butonu) yeşil vurgu diliyle eşleşen dolgulu bir
+   ikon rozeti — jenerik değil, markaya ait bir görünüm hedefleniyor. */
+.invf-fb-icon-badge {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  background: #008060;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
 @media (max-width: 560px) {
   .invf-fb-trigger {
     bottom: calc(16px + env(safe-area-inset-bottom, 0px)) !important;
@@ -166,6 +180,10 @@ const FEEDBACK_CSS = `
 
 type FeedbackButtonProps = {
   locale: Locale;
+  // Geniş ekranlarda ürün listesi kartının gerçek kenarına göre ölçülen
+  // sol boşluk (bkz. useInventoryView.ts). Verilmezse CSS'teki 44px
+  // varsayılanı kullanılır — mobilde zaten !important kuralı bunu eziyor.
+  leftOffset?: number;
 };
 
 export function FeedbackButton(props: FeedbackButtonProps) {
@@ -246,10 +264,20 @@ export function FeedbackButton(props: FeedbackButtonProps) {
       <button
         type="button"
         className="invf-fb-trigger"
+        style={props.leftOffset != null ? { left: props.leftOffset } : undefined}
         onClick={() => setOpen(true)}
         aria-label={t.feedbackTrigger}
       >
-        <span aria-hidden="true">💬</span>
+        <span className="invf-fb-icon-badge" aria-hidden="true">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
+            <path
+              d="M4 4h16a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H9l-5 4v-4H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z"
+              stroke="#FFFFFF"
+              strokeWidth="2.2"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </span>
         <span className="invf-fb-label">{t.feedbackTrigger}</span>
       </button>
 
