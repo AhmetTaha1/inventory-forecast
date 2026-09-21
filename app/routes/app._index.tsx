@@ -17,7 +17,8 @@ import { SummaryCard } from "../components/inventory/SummaryCard";
 import { AllProductsCard } from "../components/inventory/AllProductsCard";
 import { RefreshBar } from "../components/inventory/RefreshBar";
 import { ProductRow } from "../components/inventory/ProductRow";
-import { getShopSettings } from "../lib/shopSettings.server";
+import { getShopSettings, hasTourBeenSeen } from "../lib/shopSettings.server";
+import { WelcomeTour } from "../components/WelcomeTour";
 import { getActiveSnoozes } from "../lib/snooze.server";
 import type { Category } from "../types/inventory";
 
@@ -41,10 +42,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   // veri hazır olana kadar bomboş bekletiyordu (kullanıcı geri bildirimi:
   // ilk açılışta uzun süre boş/donuk beyaz ekran).
   const dashboardPromise = (async () => {
-    const [{ groups, computedAt, fromCache }, snoozes, shopSettings] = await Promise.all([
+    const [{ groups, computedAt, fromCache }, snoozes, shopSettings, tourSeen] = await Promise.all([
       getForecastGroups(session.shop, admin, { forceRefresh }),
       getActiveSnoozes(session.shop),
       getShopSettings(session.shop),
+      hasTourBeenSeen(session.shop),
     ]);
 
     // Erteleme, pahalı ForecastSnapshot yeniden hesaplamasının DIŞINDA,
@@ -95,6 +97,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       computedAt: computedAt.toISOString(),
       fromCache,
       hasReorderSettings,
+      // Karşılama turu SADECE ilk açılışta gösterilecek — sunucuda kalıcı
+      // olarak işaretleniyor (bkz. shopSettings.server.ts), bir daha asla çıkmaz.
+      showTour: !tourSeen,
     };
   })();
 
@@ -130,6 +135,7 @@ type IndexContentProps = {
   computedAt: string;
   fromCache: boolean;
   hasReorderSettings: boolean;
+  showTour: boolean;
   locale: Locale;
   t: Dictionary;
 };
@@ -144,6 +150,7 @@ function IndexContent({
   computedAt,
   fromCache,
   hasReorderSettings,
+  showTour,
   locale,
   t,
 }: IndexContentProps) {
@@ -449,6 +456,8 @@ function IndexContent({
         isCramped={feedbackIsCramped}
         isScrolling={isScrolling}
       />
+
+      {showTour && <WelcomeTour t={t} />}
 
       {showScrollTop && (
         <button

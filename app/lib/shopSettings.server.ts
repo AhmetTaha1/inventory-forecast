@@ -63,3 +63,24 @@ export async function saveShopSettings(
         create: { shop, leadTimeDays, coverageDays, onboardedAt: new Date() },
     });
 }
+
+// --- Karşılama turu (WelcomeTour) — sadece ilk açılışta gösterilir ---
+// Bilerek localStorage DEĞİL: tarayıcı belleği temizlenirse ya da farklı
+// bir cihazdan/kullanıcıdan girilirse tur tekrar tekrar çıkardı. Sunucu
+// tarafında kalıcı olduğu için gerçekten "bir kez" garantisi veriyor.
+
+export async function hasTourBeenSeen(shop: string): Promise<boolean> {
+    const row = await prisma.shopSettings.findUnique({ where: { shop } });
+    return row?.tourSeenAt != null;
+}
+
+export async function markTourSeen(shop: string): Promise<void> {
+    // Satır henüz yoksa (mağaza hiç sipariş ayarı yapmamış) burada
+    // oluşturuluyor — leadTimeDays/coverageDays şemadaki varsayılanlara
+    // düşer, onboardedAt null kalır (bu iki kavram birbirinden bağımsız).
+    await prisma.shopSettings.upsert({
+        where: { shop },
+        update: { tourSeenAt: new Date() },
+        create: { shop, tourSeenAt: new Date() },
+    });
+}
