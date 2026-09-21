@@ -1,6 +1,7 @@
 import type { FormEvent } from "react";
 import { useEffect, useState } from "react";
 import { getDictionary, type Locale } from "../lib/translations";
+import { INVF_FONT_STACK } from "../lib/fontStack";
 
 // ---------------------------------------------------------------------------
 // Web3Forms ayarı
@@ -14,14 +15,9 @@ const WEB3FORMS_ACCESS_KEY = "acbd6a73-2595-421a-ba12-c7f08c5b655f";
 
 type Status = "idle" | "sending" | "success" | "error";
 
-// Shopify Admin arayüzü Inter fontunu kullanıyor (Polaris'in kendi tasarım
-// sistemi). Bu bileşen artık <s-page> DIŞINDA render edildiği için o
-// mirası almıyor — miras almaya güvenmek yerine burada açıkça tanımlıyoruz,
-// aksi halde tarayıcı varsayılan sistem fontuna düşüyor (görünüşte belirgin
-// bir kalite kaybı). Fallback zinciri Inter yüklenmezse de admin arayüzüyle
-// tutarlı bir görünüm sağlasın diye standart sistem fontu sırasını izliyor.
-const INVF_FB_FONT_STACK =
-  "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif";
+// bkz. app/lib/fontStack.ts — <s-page> dışında render edilen bileşenler
+// Inter fontunu miras almıyor, açıkça tanımlanması gerekiyor.
+const INVF_FB_FONT_STACK = INVF_FONT_STACK;
 
 const FEEDBACK_CSS = `
 /* Tetikleyici buton: sol alt köşede sabit/yüzen. "Yukarı çık" butonuyla
