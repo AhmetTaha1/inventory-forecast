@@ -164,6 +164,7 @@ export default function Index() {
             justRefreshed={!fromCache}
             t={t}
             onRefresh={refresh}
+            settingsHref={`/app/settings${locale ? `?locale=${locale}` : ""}`}
           />
 
           <div
@@ -244,18 +245,14 @@ export default function Index() {
                     <span style={{ fontSize: 13, color: "#5C5C5C" }}>
                       {subtitleParts.join(" · ")}
                     </span>
-                    {snoozedCount > 0 && filter !== "snoozed" && (
-                      <button
-                        type="button"
-                        className="invf-snoozed-link"
-                        onClick={showSnoozed}
-                      >
-                        {t.snoozeLinkText(snoozedCount)}
-                      </button>
-                    )}
                   </div>
 
                   <div className="invf-toolbar-actions">
+                    {snoozedCount > 0 && filter !== "snoozed" && (
+                      <button type="button" className="invf-snoozed-link" onClick={showSnoozed}>
+                        {t.snoozeLinkText(snoozedCount)}
+                      </button>
+                    )}
                     {filteredRows.length > 0 && (
                       <button
                         type="button"

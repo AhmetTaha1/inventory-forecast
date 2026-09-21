@@ -117,17 +117,27 @@ export const PAGE_CSS = `
 .invf-hint { font-size: 12.5px; color: #6B6B6B; margin-top: -4px; }
 
 /* ------------------------- Ertele (snooze) ------------------------- */
+/* Diğer araç çubuğu butonlarıyla (Excel indir / Temizle) aynı boyut ve
+   tıklanabilirlik dilinde — önceden düz, alt çizgisiz metindi ve "tıklanabilir
+   bir şey" olduğu hiç belli olmuyordu (kullanıcı geri bildirimi). */
 .invf-snoozed-link {
   all: unset;
   box-sizing: border-box;
   cursor: pointer;
-  align-self: flex-start;
-  margin-top: 2px;
-  font-size: 12.5px;
-  font-weight: 600;
-  color: #6B6B6B;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 15px;
+  border-radius: 9px;
+  border: 1px solid #E8A317;
+  background: #FFF8E8;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  color: #7A5100;
+  white-space: nowrap;
 }
-.invf-snoozed-link:hover { color: #1A1A1A; text-decoration: underline; }
+.invf-snoozed-link:hover { background: #FFEFC7; }
 
 .invf-snooze-select {
   margin-top: 6px;
@@ -213,6 +223,7 @@ export const PAGE_CSS = `
   white-space: nowrap;
 }
 .invf-clear-btn:hover { background: #E3F1DF; }
+.invf-settings-link:hover { background: #F7F7F7 !important; border-color: #008060 !important; }
 /* Excel indir butonu: dolu, Excel'in koyu yeşiline yakın renk. İkon
    kaldırıldı (küçük boyutta tanınmıyordu); metin kısa tutuldu çünkü
    hangi ürünleri indirdiği zaten hemen üstteki "Süzgeç: ..." satırında
