@@ -45,6 +45,15 @@ export function RefreshBar(props: RefreshBarProps) {
     animation: props.isRefreshing ? "invf-spin 0.9s linear infinite" : "none",
   };
 
+  // Yenile ikonuyla ("↻") aynı görsel ağırlıkta olsun diye — dişli ikonu
+  // ("⚙") ayrı bir boyut tanımı olmadan üst elemanın 14px font boyutunu
+  // miras alıyordu ve çok küçük/soluk kalıyordu (kullanıcı geri bildirimi).
+  const gearIconStyle: CSSProperties = {
+    display: "inline-block",
+    fontSize: 16,
+    lineHeight: 1,
+  };
+
   const settingsLinkStyle: CSSProperties = {
     all: "unset",
     boxSizing: "border-box",
@@ -94,7 +103,7 @@ export function RefreshBar(props: RefreshBarProps) {
       </div>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
         <Link to={props.settingsHref} className="invf-settings-link" style={settingsLinkStyle}>
-          <span aria-hidden="true">⚙</span>
+          <span style={gearIconStyle} aria-hidden="true">⚙</span>
           {t.reorderSettingsLinkLabel}
         </Link>
         <button
