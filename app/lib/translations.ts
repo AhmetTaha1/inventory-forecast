@@ -175,7 +175,9 @@ export type Dictionary = {
     settingsSaveButton: string;
     settingsBackLink: string;
     reorderQtySuggestion: (qty: number) => string;
+    reorderQtyByDate: (qty: number, dateText: string) => string;
     reorderOverdueNote: string;
+    reorderOverdueWithQty: (qty: number) => string;
 };
 
 // ---------------------------------------------------------------------------
@@ -313,7 +315,9 @@ const tr: Dictionary = {
     settingsSaveButton: "Kaydet ve panele dön",
     settingsBackLink: "← Panele dön",
     reorderQtySuggestion: (qty) => `~${qty} adet sipariş önerisi`,
+    reorderQtyByDate: (qty, dateText) => `${dateText} civarı · ~${qty} adet öner`,
     reorderOverdueNote: "Sipariş için süre geçti — tedarik süresi göz önüne alındığında zaten geç kalınmış olabilir",
+    reorderOverdueWithQty: (qty) => `Sipariş için süre geçti — hemen ~${qty} adet sipariş ver`,
 };
 
 // ---------------------------------------------------------------------------
@@ -451,7 +455,9 @@ const en: Dictionary = {
     settingsSaveButton: "Save and return to dashboard",
     settingsBackLink: "← Back to dashboard",
     reorderQtySuggestion: (qty) => `~${qty} units suggested`,
+    reorderQtyByDate: (qty, dateText) => `around ${dateText} · ~${qty} units suggested`,
     reorderOverdueNote: "Past the reorder point — given your lead time, you may already be behind",
+    reorderOverdueWithQty: (qty) => `Past due for reorder — order ~${qty} units now`,
 };
 
 export const DICTS: Record<Locale, Dictionary> = { tr, en };
