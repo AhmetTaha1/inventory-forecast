@@ -43,6 +43,7 @@ type UseInventoryViewArgs = {
   deadStock: InventoryItem[];
   insufficientData: InventoryItem[];
   reorderAlerts: InventoryItem[];
+  snoozedRows: { item: InventoryItem; category: Category; snoozeUntil: Date | string | null }[];
   computedAt: string;
   locale: Locale;
   t: Dictionary;
@@ -58,6 +59,7 @@ export function useInventoryView({
   deadStock,
   insufficientData,
   reorderAlerts,
+  snoozedRows,
   computedAt,
   locale,
   t,
@@ -174,12 +176,15 @@ export function useInventoryView({
 
   const refresh = () => navigate("?refresh=1");
 
+  // snoozeUntil: allRows'taki satırlar için hep null (ertelenmemiş
+  // demek) — snoozedRows ile aynı şekle sahip olsun diye, böylece
+  // filteredRows/pageRows tek tip bir liste olarak akıyor.
   const allRows = useMemo(
     () => [
-      ...outOfStock.map((item) => ({ item, category: "out" as Category })),
-      ...soonToStockout.map((item) => ({ item, category: "soon" as Category })),
-      ...deadStock.map((item) => ({ item, category: "dead" as Category })),
-      ...insufficientData.map((item) => ({ item, category: "nodata" as Category })),
+      ...outOfStock.map((item) => ({ item, category: "out" as Category, snoozeUntil: null as Date | string | null })),
+      ...soonToStockout.map((item) => ({ item, category: "soon" as Category, snoozeUntil: null as Date | string | null })),
+      ...deadStock.map((item) => ({ item, category: "dead" as Category, snoozeUntil: null as Date | string | null })),
+      ...insufficientData.map((item) => ({ item, category: "nodata" as Category, snoozeUntil: null as Date | string | null })),
     ],
     [outOfStock, soonToStockout, deadStock, insufficientData],
   );
@@ -191,10 +196,16 @@ export function useInventoryView({
     nodata: insufficientData.length,
   };
 
+  // "snoozed" filtresi seçiliyken kaynak allRows değil snoozedRows —
+  // ertelenmiş ürünler zaten ana listelerden (allRows'un beslendiği 4
+  // kategori) çıkarılmış durumda (bkz. app._index.tsx loader'ı).
   const filteredRows = useMemo(() => {
     const q = query.trim().toLocaleLowerCase(intlLocale(locale));
-    return allRows.filter(({ item, category }) => {
-      if (filter === "urgent") {
+    const source = filter === "snoozed" ? snoozedRows : allRows;
+    return source.filter(({ item, category }) => {
+      if (filter === "snoozed") {
+        // Kaynak zaten yalnızca ertelenmiş satırlar, ek kategori kontrolü gerekmiyor.
+      } else if (filter === "urgent") {
         const urgent =
           category === "out" ||
           (category === "soon" && Math.round(item.stockoutInDays ?? Infinity) <= URGENT_DAYS);
@@ -206,7 +217,7 @@ export function useInventoryView({
       const haystack = `${item.productTitle} ${item.variantTitle}`.toLocaleLowerCase(intlLocale(locale));
       return haystack.includes(q);
     });
-  }, [allRows, filter, query, locale]);
+  }, [allRows, snoozedRows, filter, query, locale]);
 
   const totalPages = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
@@ -244,6 +255,14 @@ export function useInventoryView({
     scrollToList();
   }
 
+  function showSnoozed() {
+    setFilter("snoozed");
+    setQueryInput("");
+    setQuery("");
+    setPage(1);
+    scrollToList();
+  }
+
   function handleExport() {
     const rows = buildExportRows(filteredRows, t, locale, categoryMeta, hasReorderSettings);
     const label = slugifyFilterName(filter, t, categoryMeta);
@@ -272,7 +291,13 @@ export function useInventoryView({
   // ---- Süzgeç durumu -------------------------------------------------------
   const trimmedQuery = query.trim();
   const activeFilterLabel =
-    filter === "all" ? null : filter === "urgent" ? t.urgentFilterLabel : categoryMeta[filter].label;
+    filter === "all"
+      ? null
+      : filter === "urgent"
+        ? t.urgentFilterLabel
+        : filter === "snoozed"
+          ? t.snoozedFilterLabel
+          : categoryMeta[filter].label;
   const isFiltered = activeFilterLabel !== null || trimmedQuery.length > 0;
 
   const subtitleParts: string[] = [];
@@ -344,6 +369,8 @@ export function useInventoryView({
     changeFilter,
     clearFilter,
     showUrgent,
+    showSnoozed,
+    snoozedCount: snoozedRows.length,
     handleExport,
     lastUpdated,
     alertDescription,

@@ -16,6 +16,8 @@ import { AllProductsCard } from "../components/inventory/AllProductsCard";
 import { RefreshBar } from "../components/inventory/RefreshBar";
 import { ProductRow } from "../components/inventory/ProductRow";
 import { getShopSettings } from "../lib/shopSettings.server";
+import { getActiveSnoozes } from "../lib/snooze.server";
+import type { Category } from "../types/inventory";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, session } = await authenticate.admin(request);
@@ -33,6 +35,39 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     forceRefresh,
   });
 
+  // YENİ (ertele/snooze): erteleme, pahalı ForecastSnapshot yeniden
+  // hesaplamasının DIŞINDA, ayrı ve ucuz bir tabloda tutuluyor (bkz.
+  // snooze.server.ts) — burada her istekte hızlıca uygulanıyor, bir ürünü
+  // ertelemek/geri almak asla Shopify'dan yeniden veri çekmeyi tetiklemiyor.
+  const snoozes = await getActiveSnoozes(session.shop);
+  function splitSnoozed<T extends { variantId: string }>(items: T[], category: Category) {
+    const visible: T[] = [];
+    const snoozed: { item: T; category: Category; snoozeUntil: Date | null }[] = [];
+    for (const item of items) {
+      if (snoozes.has(item.variantId)) {
+        snoozed.push({ item, category, snoozeUntil: snoozes.get(item.variantId) ?? null });
+      } else {
+        visible.push(item);
+      }
+    }
+    return { visible, snoozed };
+  }
+
+  const outOfStockSplit = splitSnoozed(groups.outOfStock, "out");
+  const soonToStockoutSplit = splitSnoozed(groups.soonToStockout, "soon");
+  const insufficientDataSplit = splitSnoozed(groups.insufficientData, "nodata");
+  const deadStockSplit = splitSnoozed(groups.deadStock, "dead");
+  const snoozedRows = [
+    ...outOfStockSplit.snoozed,
+    ...soonToStockoutSplit.snoozed,
+    ...insufficientDataSplit.snoozed,
+    ...deadStockSplit.snoozed,
+  ];
+  // Sipariş uyarısı (üstteki kırmızı/sarı kutu) ertelenmiş ürünleri hiç
+  // saymamalı — mağaza sahibi bilerek "bunu şimdilik önemseme" dediği bir
+  // ürün için uyarı almaya devam etmesin diye erteledi zaten.
+  const reorderAlerts = groups.reorderAlerts.filter((f) => !snoozes.has(f.variantId));
+
   // YENİ (tedarik süresi): sipariş ayarları hiç yapılmamışsa (onboardedAt
   // yok) panelde bir hatırlatma kartı gösteriyoruz VE ürün satırlarındaki
   // sipariş miktarı önerilerini gizliyoruz — aksi halde hiç ayarlanmamış
@@ -42,7 +77,12 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const hasReorderSettings = shopSettings?.onboardedAt != null;
 
   return {
-    ...groups,
+    outOfStock: outOfStockSplit.visible,
+    soonToStockout: soonToStockoutSplit.visible,
+    insufficientData: insufficientDataSplit.visible,
+    deadStock: deadStockSplit.visible,
+    reorderAlerts,
+    snoozedRows,
     computedAt: computedAt.toISOString(),
     fromCache,
     locale,
@@ -57,6 +97,7 @@ export default function Index() {
     insufficientData,
     deadStock,
     reorderAlerts,
+    snoozedRows,
     computedAt,
     fromCache,
     locale,
@@ -95,12 +136,15 @@ export default function Index() {
     feedbackLeftOffset,
     feedbackIsCramped,
     isScrolling,
+    showSnoozed,
+    snoozedCount,
   } = useInventoryView({
     outOfStock,
     soonToStockout,
     deadStock,
     insufficientData,
     reorderAlerts,
+    snoozedRows,
     computedAt,
     locale,
     t,
@@ -200,6 +244,15 @@ export default function Index() {
                     <span style={{ fontSize: 13, color: "#5C5C5C" }}>
                       {subtitleParts.join(" · ")}
                     </span>
+                    {snoozedCount > 0 && filter !== "snoozed" && (
+                      <button
+                        type="button"
+                        className="invf-snoozed-link"
+                        onClick={showSnoozed}
+                      >
+                        {t.snoozeLinkText(snoozedCount)}
+                      </button>
+                    )}
                   </div>
 
                   <div className="invf-toolbar-actions">
@@ -243,7 +296,7 @@ export default function Index() {
                 </div>
               )}
 
-              {pageRows.map(({ item, category }) => (
+              {pageRows.map(({ item, category, snoozeUntil }) => (
                 <ProductRow
                   key={item.variantId}
                   item={item}
@@ -252,11 +305,25 @@ export default function Index() {
                   t={t}
                   locale={locale}
                   showReorderSuggestion={hasReorderSettings}
+                  isSnoozed={filter === "snoozed"}
+                  snoozeUntil={snoozeUntil}
                 />
               ))}
 
-              {/* Boş durumun iki ayrı sebebi var, ikisi aynı metni göstermemeli. */}
-              {filteredRows.length === 0 && allRows.length === 0 && (
+              {/* Boş durumun üç ayrı sebebi var, hiçbiri aynı metni göstermemeli. */}
+              {filteredRows.length === 0 && filter === "snoozed" && (
+                <div className="invf-empty">
+                  <span style={{ fontSize: 26 }}>🌙</span>
+                  <span style={{ fontSize: 15, fontWeight: 700, color: "#1A1A1A" }}>
+                    {t.snoozedEmptyTitle}
+                  </span>
+                  <span style={{ fontSize: 13, color: "#5C5C5C", maxWidth: 380 }}>
+                    {t.snoozedEmptyDesc}
+                  </span>
+                </div>
+              )}
+
+              {filteredRows.length === 0 && filter !== "snoozed" && allRows.length === 0 && (
                 <div className="invf-empty">
                   <span style={{ fontSize: 26 }}>📦</span>
                   <span style={{ fontSize: 15, fontWeight: 700, color: "#1A1A1A" }}>
@@ -268,7 +335,7 @@ export default function Index() {
                 </div>
               )}
 
-              {filteredRows.length === 0 && allRows.length > 0 && (
+              {filteredRows.length === 0 && filter !== "snoozed" && allRows.length > 0 && (
                 <div className="invf-empty">
                   <span style={{ fontSize: 26 }}>🔍</span>
                   <span style={{ fontSize: 15, fontWeight: 700, color: "#1A1A1A" }}>

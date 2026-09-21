@@ -80,3 +80,10 @@ export function stockoutDateText(days: number, locale: Locale): string {
     month: "long",
   });
 }
+
+// stockoutDateText "bugünden X gün sonra" hesaplıyor; erteleme (snooze)
+// bitiş tarihi gibi ZATEN BELİRLİ bir tarih için bu gereksiz — direkt
+// mutlak tarihi biçimlendiriyor.
+export function absoluteDateText(date: Date, locale: Locale): string {
+  return date.toLocaleDateString(intlLocale(locale), { day: "numeric", month: "long" });
+}
