@@ -50,6 +50,13 @@ model ShopSettings {
   leadTimeDays Int       @default(14)
   coverageDays Int       @default(30)
   onboardedAt  DateTime?
+  // Karşılama turu (WelcomeTour) sadece ilk açılışta gösterilmeli, bir
+  // daha ASLA tekrar çıkmamalı — bunu tarayıcı belleği (localStorage)
+  // yerine burada, sunucu tarafında kalıcı tutuyoruz (bkz.
+  // shopSettings.server.ts: hasTourBeenSeen/markTourSeen). Satır henüz
+  // sipariş ayarları yapılmamış bir mağaza için de erkenden (tur
+  // görüldüğünde) oluşturulabiliyor — onboardedAt'tan bağımsız bir alan.
+  tourSeenAt   DateTime?
 }
 
 // "Ertele" (snooze) — kalıcı bir mute yerine SÜRELİ erteleme (bkz.

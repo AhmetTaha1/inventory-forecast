@@ -37,6 +37,24 @@ export type Dictionary = {
     // ---- Sayfa başlığı / üst şerit ----
     pageHeading: string;
     loadingMessage: string;
+    loadingMessageSales: string;
+    loadingMessageForecast: string;
+    loadingMessageAlmostDone: string;
+
+    // ---- Karşılama turu (WelcomeTour, sadece ilk açılış) ----
+    tourAriaLabel: string;
+    tourSkip: string;
+    tourPrev: string;
+    tourNext: string;
+    tourFinish: string;
+    tourStep1Title: string;
+    tourStep1Desc: string;
+    tourStep2Title: string;
+    tourStep2Desc: string;
+    tourStep3Title: string;
+    tourStep3Desc: string;
+    tourStep4Title: string;
+    tourStep4Desc: string;
     refreshSubtitle: string;
     lastUpdatedPrefix: string;
     justRefreshed: string;
@@ -204,6 +222,23 @@ export type Dictionary = {
 const tr: Dictionary = {
     pageHeading: "Envanter Tahmini",
     loadingMessage: "Ürünleriniz analiz ediliyor...",
+    loadingMessageSales: "Satış geçmişiniz taranıyor...",
+    loadingMessageForecast: "Tükenme tahminleri hesaplanıyor...",
+    loadingMessageAlmostDone: "Neredeyse hazır...",
+
+    tourAriaLabel: "Uygulamaya hoş geldiniz turu",
+    tourSkip: "Atla",
+    tourPrev: "Geri",
+    tourNext: "İleri",
+    tourFinish: "Başlayın",
+    tourStep1Title: "Envanter Tahmini'ne hoş geldiniz",
+    tourStep1Desc: "Bu panel, hangi ürünün ne zaman tükeneceğini ve ne zaman sipariş vermeniz gerektiğini tek bakışta gösterir.",
+    tourStep2Title: "Kartlara tıklayarak filtrele",
+    tourStep2Desc: "Üstteki renkli kartlara (Stok bitti, Azalıyor, Satılmıyor vb.) tıklayarak listeyi anında o kategoriye göre süzebilirsin.",
+    tourStep3Title: "Her ürün için net bir yol haritası",
+    tourStep3Desc: "Listede her ürünün ne zaman biteceğini, satış hızını ve trendini görürsün; gerekmeyen uyarıları da erteleyebilirsin.",
+    tourStep4Title: "Sipariş zamanlamanı netleştir",
+    tourStep4Desc: "Ayarlar sayfasından tedarik süreni girersen, tam olarak ne kadar ve ne zaman sipariş vermen gerektiğini de söyleriz. İstediğin zaman Excel'e de aktarabilirsin.",
     refreshSubtitle: "Satış hızınıza göre hangi ürünün ne zaman biteceği",
     lastUpdatedPrefix: "Son güncelleme: ",
     justRefreshed: "✓ Az önce güncellendi",
@@ -360,6 +395,23 @@ const tr: Dictionary = {
 const en: Dictionary = {
     pageHeading: "Inventory Forecast",
     loadingMessage: "Analyzing your products...",
+    loadingMessageSales: "Scanning your sales history...",
+    loadingMessageForecast: "Calculating stockout forecasts...",
+    loadingMessageAlmostDone: "Almost there...",
+
+    tourAriaLabel: "Welcome tour",
+    tourSkip: "Skip",
+    tourPrev: "Back",
+    tourNext: "Next",
+    tourFinish: "Get started",
+    tourStep1Title: "Welcome to Inventory Forecast",
+    tourStep1Desc: "This dashboard shows you at a glance which products will run out, and when you need to reorder.",
+    tourStep2Title: "Click the cards to filter",
+    tourStep2Desc: "Click any of the colored cards above (Out of stock, Running low, Not selling, etc.) to instantly filter the list by that category.",
+    tourStep3Title: "A clear plan for every product",
+    tourStep3Desc: "The list shows when each product will run out, its sales speed and trend — and you can snooze alerts you don't need right now.",
+    tourStep4Title: "Set your reorder timing",
+    tourStep4Desc: "Enter your lead time in Settings and we'll tell you exactly how much and when to reorder. You can export the list to Excel anytime.",
     refreshSubtitle: "When each product will run out, based on your sales speed",
     lastUpdatedPrefix: "Last updated: ",
     justRefreshed: "✓ Just updated",
