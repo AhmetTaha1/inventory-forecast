@@ -14,7 +14,7 @@ import type { MetaFunction } from "react-router";
 // ÖNEMLİ: Bu, geliştiricinin kod tabanına bakarak yazdığı taslak bir
 // metin — gerçek veri akışlarını (aşağıda) doğru yansıtıyor ama hukuki
 // bir belge olarak yayınlanmadan önce bir avukat/mali müşavir gözden
-// geçirmeli, özellikle [İLETİŞİM E-POSTASI] alanı doldurulmalı.
+// geçirmeli.
 export const meta: MetaFunction = () => [
   { title: "Privacy Policy — Inventory Forecast" },
 ];
@@ -35,7 +35,6 @@ const PRIVACY_PAGE_CSS = `
 .invf-privacy h2 { font-size: 18px; margin-top: 36px; margin-bottom: 8px; }
 .invf-privacy p, .invf-privacy li { font-size: 15px; color: #303030; }
 .invf-privacy ul { padding-left: 20px; }
-.invf-privacy .placeholder { background: #FFF4E0; padding: 1px 5px; border-radius: 4px; }
 .invf-privacy a { color: #008060; }
 `;
 
@@ -126,7 +125,7 @@ export default function PrivacyPolicy() {
         <h2>9. Contact Us</h2>
         <p>
           Questions about this policy or your data can be sent to{" "}
-          <span className="placeholder">[İLETİŞİM E-POSTASI]</span>.
+          <a href="mailto:inventoryforecast.support@gmail.com">inventoryforecast.support@gmail.com</a>.
         </p>
       </div>
     </div>
