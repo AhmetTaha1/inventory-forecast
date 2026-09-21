@@ -1,5 +1,5 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
-import { Form, redirect, useLoaderData, useNavigation } from "react-router";
+import { Form, Link, redirect, useLoaderData, useNavigation } from "react-router";
 import { authenticate } from "../shopify.server";
 import { getShopSettings, saveShopSettings } from "../lib/shopSettings.server";
 import { DEFAULT_COVERAGE_DAYS, DEFAULT_LEAD_TIME_DAYS } from "../lib/forecast";
@@ -151,9 +151,9 @@ export default function Settings() {
                 <button type="submit" className="invf-settings-save" disabled={isSaving}>
                   {t.settingsSaveButton}
                 </button>
-                <a className="invf-settings-back" href={`/app${locale ? `?locale=${locale}` : ""}`}>
+                <Link className="invf-settings-back" to={`/app${locale ? `?locale=${locale}` : ""}`}>
                   {t.settingsBackLink}
-                </a>
+                </Link>
               </div>
             </div>
           </Form>
