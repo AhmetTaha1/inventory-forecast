@@ -1,10 +1,12 @@
+import { Suspense } from "react";
 import type { HeadersFunction, LoaderFunctionArgs } from "react-router";
-import { useLoaderData } from "react-router";
+import { Await, useLoaderData } from "react-router";
 import { authenticate } from "../shopify.server";
 import { getForecastGroups } from "../lib/forecastCache.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { FeedbackButton } from "../components/FeedbackButton";
-import { resolveLocale, getDictionary } from "../lib/translations";
+import { LoadingScreen } from "../components/LoadingScreen";
+import { resolveLocale, getDictionary, type Dictionary, type Locale } from "../lib/translations";
 import { buildCategoryMeta } from "../lib/inventory/categoryMeta";
 import { CATEGORY_ORDER, PAGE_SIZE, URGENT_DAYS } from "../lib/inventory/constants";
 import { PAGE_CSS } from "../lib/inventory/styles";
@@ -31,80 +33,120 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   // çevrildi, başka her dil İngilizce'ye düşüyor (bkz. translations.ts).
   const locale = resolveLocale(url.searchParams.get("locale"));
 
-  const { groups, computedAt, fromCache } = await getForecastGroups(session.shop, admin, {
-    forceRefresh,
-  });
+  // YENİ (akışla yükleme / streaming): getForecastGroups (ilk Shopify
+  // senkronizasyonunu içerebilir, büyük mağazalarda uzun sürebilir)
+  // BEKLENMİYOR — bir promise olarak döndürülüyor. Sayfa kabuğu
+  // (LoadingScreen) ANINDA gidiyor, veri hazır olunca <Suspense>/<Await>
+  // ile akışla yerine geliyor. Önceden bu satırdaki `await` tüm sayfayı
+  // veri hazır olana kadar bomboş bekletiyordu (kullanıcı geri bildirimi:
+  // ilk açılışta uzun süre boş/donuk beyaz ekran).
+  const dashboardPromise = (async () => {
+    const [{ groups, computedAt, fromCache }, snoozes, shopSettings] = await Promise.all([
+      getForecastGroups(session.shop, admin, { forceRefresh }),
+      getActiveSnoozes(session.shop),
+      getShopSettings(session.shop),
+    ]);
 
-  // YENİ (ertele/snooze): erteleme, pahalı ForecastSnapshot yeniden
-  // hesaplamasının DIŞINDA, ayrı ve ucuz bir tabloda tutuluyor (bkz.
-  // snooze.server.ts) — burada her istekte hızlıca uygulanıyor, bir ürünü
-  // ertelemek/geri almak asla Shopify'dan yeniden veri çekmeyi tetiklemiyor.
-  const snoozes = await getActiveSnoozes(session.shop);
-  function splitSnoozed<T extends { variantId: string }>(items: T[], category: Category) {
-    const visible: T[] = [];
-    const snoozed: { item: T; category: Category; snoozeUntil: Date | null }[] = [];
-    for (const item of items) {
-      if (snoozes.has(item.variantId)) {
-        snoozed.push({ item, category, snoozeUntil: snoozes.get(item.variantId) ?? null });
-      } else {
-        visible.push(item);
+    // Erteleme, pahalı ForecastSnapshot yeniden hesaplamasının DIŞINDA,
+    // ayrı ve ucuz bir tabloda tutuluyor (bkz. snooze.server.ts) — burada
+    // her istekte hızlıca uygulanıyor.
+    function splitSnoozed<T extends { variantId: string }>(items: T[], category: Category) {
+      const visible: T[] = [];
+      const snoozed: { item: T; category: Category; snoozeUntil: Date | null }[] = [];
+      for (const item of items) {
+        if (snoozes.has(item.variantId)) {
+          snoozed.push({ item, category, snoozeUntil: snoozes.get(item.variantId) ?? null });
+        } else {
+          visible.push(item);
+        }
       }
+      return { visible, snoozed };
     }
-    return { visible, snoozed };
-  }
 
-  const outOfStockSplit = splitSnoozed(groups.outOfStock, "out");
-  const soonToStockoutSplit = splitSnoozed(groups.soonToStockout, "soon");
-  const insufficientDataSplit = splitSnoozed(groups.insufficientData, "nodata");
-  const deadStockSplit = splitSnoozed(groups.deadStock, "dead");
-  const snoozedRows = [
-    ...outOfStockSplit.snoozed,
-    ...soonToStockoutSplit.snoozed,
-    ...insufficientDataSplit.snoozed,
-    ...deadStockSplit.snoozed,
-  ];
-  // Sipariş uyarısı (üstteki kırmızı/sarı kutu) ertelenmiş ürünleri hiç
-  // saymamalı — mağaza sahibi bilerek "bunu şimdilik önemseme" dediği bir
-  // ürün için uyarı almaya devam etmesin diye erteledi zaten.
-  const reorderAlerts = groups.reorderAlerts.filter((f) => !snoozes.has(f.variantId));
+    const outOfStockSplit = splitSnoozed(groups.outOfStock, "out");
+    const soonToStockoutSplit = splitSnoozed(groups.soonToStockout, "soon");
+    const insufficientDataSplit = splitSnoozed(groups.insufficientData, "nodata");
+    const deadStockSplit = splitSnoozed(groups.deadStock, "dead");
+    const snoozedRows = [
+      ...outOfStockSplit.snoozed,
+      ...soonToStockoutSplit.snoozed,
+      ...insufficientDataSplit.snoozed,
+      ...deadStockSplit.snoozed,
+    ];
+    // Sipariş uyarısı (üstteki kırmızı/sarı kutu) ertelenmiş ürünleri hiç
+    // saymamalı — mağaza sahibi bilerek "bunu şimdilik önemseme" dediği bir
+    // ürün için uyarı almaya devam etmesin diye erteledi zaten.
+    const reorderAlerts = groups.reorderAlerts.filter((f) => !snoozes.has(f.variantId));
 
-  // YENİ (tedarik süresi): sipariş ayarları hiç yapılmamışsa (onboardedAt
-  // yok) panelde bir hatırlatma kartı gösteriyoruz VE ürün satırlarındaki
-  // sipariş miktarı önerilerini gizliyoruz — aksi halde hiç ayarlanmamış
-  // varsayılan (14 gün) değerlere göre üretilmiş bir sayı, kullanıcı bunu
-  // hiç görmeyi/onaylamayı seçmeden sessizce panelde belirirdi.
-  const shopSettings = await getShopSettings(session.shop);
-  const hasReorderSettings = shopSettings?.onboardedAt != null;
+    // Sipariş ayarları (tedarik süresi) hiç yapılmamışsa (onboardedAt yok)
+    // panelde bir hatırlatma kartı gösteriyoruz VE ürün satırlarındaki
+    // sipariş miktarı önerilerini gizliyoruz — aksi halde hiç ayarlanmamış
+    // varsayılan (14 gün) değerlere göre üretilmiş bir sayı, kullanıcı bunu
+    // hiç görmeyi/onaylamayı seçmeden sessizce panelde belirirdi.
+    const hasReorderSettings = shopSettings?.onboardedAt != null;
 
-  return {
-    outOfStock: outOfStockSplit.visible,
-    soonToStockout: soonToStockoutSplit.visible,
-    insufficientData: insufficientDataSplit.visible,
-    deadStock: deadStockSplit.visible,
-    reorderAlerts,
-    snoozedRows,
-    computedAt: computedAt.toISOString(),
-    fromCache,
-    locale,
-    hasReorderSettings,
-  };
+    return {
+      outOfStock: outOfStockSplit.visible,
+      soonToStockout: soonToStockoutSplit.visible,
+      insufficientData: insufficientDataSplit.visible,
+      deadStock: deadStockSplit.visible,
+      reorderAlerts,
+      snoozedRows,
+      computedAt: computedAt.toISOString(),
+      fromCache,
+      hasReorderSettings,
+    };
+  })();
+
+  return { dashboardPromise, locale };
 };
 
 export default function Index() {
-  const {
-    outOfStock,
-    soonToStockout,
-    insufficientData,
-    deadStock,
-    reorderAlerts,
-    snoozedRows,
-    computedAt,
-    fromCache,
-    locale,
-    hasReorderSettings,
-  } = useLoaderData<typeof loader>();
-
+  const { dashboardPromise, locale } = useLoaderData<typeof loader>();
   const t = getDictionary(locale);
+
+  return (
+    <Suspense fallback={<LoadingScreen t={t} />}>
+      <Await resolve={dashboardPromise}>
+        {(dashboard) => <IndexContent {...dashboard} locale={locale} t={t} />}
+      </Await>
+    </Suspense>
+  );
+}
+
+// item burada bilinçli olarak `any`: loader'ın döndürdüğü satır tipi
+// (computeForecast'ın çıktısı) projenin hiçbir yerinde katı biçimde
+// tanımlanmamış — useInventoryView.ts'teki aynı isimli tip alias'ıyla
+// aynı yaklaşım.
+type InventoryItem = any;
+
+type IndexContentProps = {
+  outOfStock: InventoryItem[];
+  soonToStockout: InventoryItem[];
+  insufficientData: InventoryItem[];
+  deadStock: InventoryItem[];
+  reorderAlerts: InventoryItem[];
+  snoozedRows: { item: InventoryItem; category: Category; snoozeUntil: Date | string | null }[];
+  computedAt: string;
+  fromCache: boolean;
+  hasReorderSettings: boolean;
+  locale: Locale;
+  t: Dictionary;
+};
+
+function IndexContent({
+  outOfStock,
+  soonToStockout,
+  insufficientData,
+  deadStock,
+  reorderAlerts,
+  snoozedRows,
+  computedAt,
+  fromCache,
+  hasReorderSettings,
+  locale,
+  t,
+}: IndexContentProps) {
   const categoryMeta = buildCategoryMeta(t);
 
   const {

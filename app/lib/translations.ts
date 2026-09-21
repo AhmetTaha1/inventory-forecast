@@ -36,6 +36,7 @@ export function intlLocale(locale: Locale): string {
 export type Dictionary = {
     // ---- Sayfa başlığı / üst şerit ----
     pageHeading: string;
+    loadingMessage: string;
     refreshSubtitle: string;
     lastUpdatedPrefix: string;
     justRefreshed: string;
@@ -202,6 +203,7 @@ export type Dictionary = {
 
 const tr: Dictionary = {
     pageHeading: "Envanter Tahmini",
+    loadingMessage: "Ürünleriniz analiz ediliyor...",
     refreshSubtitle: "Satış hızınıza göre hangi ürünün ne zaman biteceği",
     lastUpdatedPrefix: "Son güncelleme: ",
     justRefreshed: "✓ Az önce güncellendi",
@@ -357,6 +359,7 @@ const tr: Dictionary = {
 
 const en: Dictionary = {
     pageHeading: "Inventory Forecast",
+    loadingMessage: "Analyzing your products...",
     refreshSubtitle: "When each product will run out, based on your sales speed",
     lastUpdatedPrefix: "Last updated: ",
     justRefreshed: "✓ Just updated",
