@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useState, type CSSProperties } from "react";
 import { useFetcher } from "react-router";
 import type { Dictionary } from "../lib/translations";
+import { INVF_FONT_STACK } from "../lib/fontStack";
 
 // ---------------------------------------------------------------------------
 // Karşılama turu — SADECE ilk açılışta gösterilir, bir daha asla çıkmaz.
@@ -59,6 +60,7 @@ const TOUR_CSS = `
   box-shadow: 0 20px 50px rgba(0,0,0,0.35);
   z-index: 301;
   transition: top 250ms ease, left 250ms ease;
+  font-family: ${INVF_FONT_STACK};
 }
 .invf-tour-tooltip--centered {
   position: fixed;
@@ -74,6 +76,7 @@ const TOUR_CSS = `
   top: 12px;
   right: 14px;
   cursor: pointer;
+  font: inherit;
   font-size: 12px;
   font-weight: 600;
   color: #6B6B6B;
