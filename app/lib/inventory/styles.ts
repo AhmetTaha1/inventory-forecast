@@ -158,15 +158,25 @@ export const PAGE_CSS = `
   gap: 4px;
 }
 .invf-snooze-info span { font-size: 11.5px; color: #6B6B6B; }
+/* Bilerek DÜZ METİN DEĞİL, sınırları belli gerçek bir buton — "Snoozed
+   until ..." bilgi satırının hemen yanında düz yeşil metin olarak durunca
+   tıklanabilir olduğu hiç belli olmuyordu (kullanıcı geri bildirimi:
+   herkes "buton" ile "etiket"i ayırt edemeyecek kadar deneyimli olmayabilir). */
 .invf-snooze-unsnooze {
   all: unset;
   box-sizing: border-box;
+  align-self: flex-start;
   cursor: pointer;
+  padding: 5px 10px;
+  border: 1px solid #008060;
+  border-radius: 7px;
+  font: inherit;
   font-size: 11.5px;
   font-weight: 700;
-  color: #008060;
+  color: #0C5132;
+  background: #FFFFFF;
 }
-.invf-snooze-unsnooze:hover { text-decoration: underline; }
+.invf-snooze-unsnooze:hover { background: #E3F1DF; }
 
 .invf-foot {
   padding: 12px 20px 16px;
