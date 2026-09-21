@@ -86,8 +86,22 @@ const SETTINGS_PAGE_CSS = `
 }
 .invf-settings-save:hover { background: #026B4F; }
 .invf-settings-save[disabled] { opacity: 0.6; cursor: wait; }
-.invf-settings-back { font-size: 13.5px; color: #008060; text-decoration: none; }
-.invf-settings-back:hover { text-decoration: underline; }
+/* Bilerek düz metin DEĞİL, kenarlıklı gerçek bir buton — panelin
+   genelindeki "Temizle"/"Ayarlar" butonlarıyla aynı görsel dil. */
+.invf-settings-back {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  padding: 11px 18px;
+  border-radius: 9px;
+  border: 1px solid #D4D4D4;
+  background: #FFFFFF;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #1A1A1A;
+  text-decoration: none;
+}
+.invf-settings-back:hover { background: #F7F7F7; border-color: #008060; }
 `;
 
 export default function Settings() {
