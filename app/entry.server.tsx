@@ -6,7 +6,14 @@ import { type EntryContext } from "react-router";
 import { isbot } from "isbot";
 import { addDocumentResponseHeaders } from "./shopify.server";
 
-export const streamTimeout = 5000;
+// YENİ: app._index.tsx artık ilk Shopify senkronizasyonunu (büyük
+// mağazalarda uzun sürebilir) akışla (streaming) getiriyor — sayfa kabuğu
+// hemen gidiyor, veri hazır olunca <Suspense>/<Await> ile yerine geliyor.
+// Eski 5 saniyelik değer bu render akışını YARIDA KESERDİ (React'ın kendi
+// render stream'ini abort ediyor, sadece bir ağ zaman aşımı değil) - büyük
+// bir mağazanın ilk hesaplaması 5 saniyeden uzun sürebileceği için 60
+// saniyeye çıkarıldı.
+export const streamTimeout = 60_000;
 
 export default async function handleRequest(
   request: Request,
