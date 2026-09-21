@@ -1,5 +1,5 @@
 export type Category = "out" | "soon" | "dead" | "nodata";
-export type Filter = "all" | "urgent" | Category;
+export type Filter = "all" | "urgent" | "snoozed" | Category;
 
 export type CategoryMeta = {
   label: string;

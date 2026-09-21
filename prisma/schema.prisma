@@ -51,3 +51,18 @@ model ShopSettings {
   coverageDays Int       @default(30)
   onboardedAt  DateTime?
 }
+
+// "Ertele" (snooze) — kalıcı bir mute yerine SÜRELİ erteleme (bkz.
+// snooze.server.ts). snoozeUntil null ise süresiz ertelenmiş demek.
+// Süresi geçmiş bir kayıt otomatik olarak "aktif değil" sayılır (tembel
+// süre kontrolü — forecastSnapshot'taki kilit mantığıyla aynı yaklaşım),
+// ayrı bir temizlik işine gerek yok.
+model SnoozedVariant {
+  id          String    @id @default(cuid())
+  shop        String
+  variantId   String
+  snoozeUntil DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@unique([shop, variantId])
+}

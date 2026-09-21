@@ -116,6 +116,48 @@ export const PAGE_CSS = `
 
 .invf-hint { font-size: 12.5px; color: #6B6B6B; margin-top: -4px; }
 
+/* ------------------------- Ertele (snooze) ------------------------- */
+.invf-snoozed-link {
+  all: unset;
+  box-sizing: border-box;
+  cursor: pointer;
+  align-self: flex-start;
+  margin-top: 2px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #6B6B6B;
+}
+.invf-snoozed-link:hover { color: #1A1A1A; text-decoration: underline; }
+
+.invf-snooze-select {
+  margin-top: 6px;
+  box-sizing: border-box;
+  max-width: 120px;
+  padding: 4px 6px;
+  border: 1px solid #D4D4D4;
+  border-radius: 6px;
+  font: inherit;
+  font-size: 11.5px;
+  color: #5C5C5C;
+  background: #FFFFFF;
+}
+.invf-snooze-info {
+  margin-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.invf-snooze-info span { font-size: 11.5px; color: #6B6B6B; }
+.invf-snooze-unsnooze {
+  all: unset;
+  box-sizing: border-box;
+  cursor: pointer;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #008060;
+}
+.invf-snooze-unsnooze:hover { text-decoration: underline; }
+
 .invf-foot {
   padding: 12px 20px 16px;
   border-top: 1px solid #F1F1F1;

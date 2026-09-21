@@ -26,6 +26,7 @@ import { confidenceText, rateText, stockoutDateText } from "./format";
 export function slugifyFilterName(filter: Filter, t: Dictionary, categoryMeta: CategoryMetaMap): string {
   if (filter === "all") return t.filenameAllProducts;
   if (filter === "urgent") return t.filenameUrgentProducts;
+  if (filter === "snoozed") return t.filenameSnoozedProducts;
   // Dosya adı ASCII olmalı — hem Türkçe hem İngilizce etiketler için
   // aynı normalize zinciri çalışıyor (İngilizce'de zaten aksan yok).
   return categoryMeta[filter].label

@@ -3,6 +3,7 @@ import type { Dictionary, Locale } from "../../lib/translations";
 import type { Category, CategoryMetaMap } from "../../types/inventory";
 import { initials, productAdminId, rateText } from "../../lib/inventory/format";
 import { CellLabel, RunwayCell, StatusPill, TrendArrow } from "./Cells";
+import { SnoozeControl } from "./SnoozeControl";
 
 type ProductRowProps = {
   item: any;
@@ -14,9 +15,22 @@ type ProductRowProps = {
   // hiç ayarlanmamış varsayılan değerlere göre üretilmiş öneriler
   // gösterilmiyor (bkz. app._index.tsx loader'daki hasReorderSettings notu).
   showReorderSuggestion: boolean;
+  // true ise bu satır "Ertelenmiş ürünler" görünümünde — SnoozeControl
+  // "ertele" seçeneği yerine "ertelemeyi kaldır"ı gösterir.
+  isSnoozed: boolean;
+  snoozeUntil: Date | string | null;
 };
 
-export function ProductRow({ item, category, categoryMeta, t, locale, showReorderSuggestion }: ProductRowProps) {
+export function ProductRow({
+  item,
+  category,
+  categoryMeta,
+  t,
+  locale,
+  showReorderSuggestion,
+  isSnoozed,
+  snoozeUntil,
+}: ProductRowProps) {
   const meta = categoryMeta[category];
 
   const reorderQty: number | null = showReorderSuggestion ? item.suggestedReorderQty : null;
@@ -124,6 +138,13 @@ export function ProductRow({ item, category, categoryMeta, t, locale, showReorde
       <div className="invf-c-status">
         <CellLabel>{t.colStatus}</CellLabel>
         <StatusPill category={category} categoryMeta={categoryMeta} />
+        <SnoozeControl
+          variantId={item.variantId}
+          isSnoozed={isSnoozed}
+          snoozeUntil={snoozeUntil}
+          t={t}
+          locale={locale}
+        />
       </div>
 
       <div className="invf-c-stock">

@@ -60,6 +60,7 @@ export type Dictionary = {
     categoryNoDataLabel: string;
     categoryNoDataHint: string;
     urgentFilterLabel: string;
+    snoozedFilterLabel: string;
 
     // ---- "Tüm ürünler" kartı ----
     allProductsTitle: string;
@@ -141,6 +142,7 @@ export type Dictionary = {
     csvDaysLater: (days: number, dateText: string) => string;
     filenameAllProducts: string;
     filenameUrgentProducts: string;
+    filenameSnoozedProducts: string;
     filenamePrefix: string;
 
     // ---- Geri bildirim formu (FeedbackButton.tsx) ----
@@ -178,6 +180,20 @@ export type Dictionary = {
     reorderQtyByDate: (qty: number, dateText: string) => string;
     reorderOverdueNote: string;
     reorderOverdueWithQty: (qty: number) => string;
+
+    // ---- Ertele (snooze) ----
+    snoozeLinkText: (count: number) => string;
+    snoozePlaceholder: string;
+    snooze7Days: string;
+    snooze30Days: string;
+    snooze90Days: string;
+    snoozeIndefinite: string;
+    snoozeSelectAriaLabel: string;
+    unsnoozeButton: string;
+    snoozedUntilLabel: (dateText: string) => string;
+    snoozedIndefiniteLabel: string;
+    snoozedEmptyTitle: string;
+    snoozedEmptyDesc: string;
 };
 
 // ---------------------------------------------------------------------------
@@ -208,6 +224,7 @@ const tr: Dictionary = {
     categoryNoDataLabel: "Tahmin yok",
     categoryNoDataHint: "Yeterli satış geçmişi yok",
     urgentFilterLabel: "Acil ürünler",
+    snoozedFilterLabel: "Ertelenmiş ürünler",
 
     allProductsTitle: "Tüm ürünler",
     allProductsShowingAll: "Şu an bunu görüntülüyorsunuz",
@@ -281,6 +298,7 @@ const tr: Dictionary = {
     csvDaysLater: (days, dateText) => `${days} gün sonra (${dateText} civarı)`,
     filenameAllProducts: "tum-urunler",
     filenameUrgentProducts: "acil-urunler",
+    filenameSnoozedProducts: "ertelenmis-urunler",
     filenamePrefix: "envanter",
 
     feedbackTrigger: "Geri bildirim",
@@ -318,6 +336,19 @@ const tr: Dictionary = {
     reorderQtyByDate: (qty, dateText) => `${dateText} civarı · ~${qty} adet öner`,
     reorderOverdueNote: "Sipariş için süre geçti — tedarik süresi göz önüne alındığında zaten geç kalınmış olabilir",
     reorderOverdueWithQty: (qty) => `Sipariş için süre geçti — hemen ~${qty} adet sipariş ver`,
+
+    snoozeLinkText: (count) => `🌙 ${count} ürün ertelendi`,
+    snoozePlaceholder: "Ertele...",
+    snooze7Days: "7 gün ertele",
+    snooze30Days: "30 gün ertele",
+    snooze90Days: "90 gün ertele",
+    snoozeIndefinite: "Süresiz ertele",
+    snoozeSelectAriaLabel: "Bu ürünü ertele",
+    unsnoozeButton: "Ertelemeyi kaldır",
+    snoozedUntilLabel: (dateText) => `${dateText}'e kadar ertelendi`,
+    snoozedIndefiniteLabel: "Süresiz ertelendi",
+    snoozedEmptyTitle: "Ertelenmiş ürün yok",
+    snoozedEmptyDesc: "Sezonu geçmiş ya da bilerek stoklamadığın ürünleri buradan erteleyip uyarı listelerinden çıkarabilirsin.",
 };
 
 // ---------------------------------------------------------------------------
@@ -348,6 +379,7 @@ const en: Dictionary = {
     categoryNoDataLabel: "No forecast",
     categoryNoDataHint: "Not enough sales history",
     urgentFilterLabel: "Urgent products",
+    snoozedFilterLabel: "Snoozed products",
 
     allProductsTitle: "All products",
     allProductsShowingAll: "You're viewing this now",
@@ -421,6 +453,7 @@ const en: Dictionary = {
     csvDaysLater: (days, dateText) => `In ${days} days (around ${dateText})`,
     filenameAllProducts: "all-products",
     filenameUrgentProducts: "urgent-products",
+    filenameSnoozedProducts: "snoozed-products",
     filenamePrefix: "inventory",
 
     feedbackTrigger: "Feedback",
@@ -458,6 +491,19 @@ const en: Dictionary = {
     reorderQtyByDate: (qty, dateText) => `around ${dateText} · ~${qty} units suggested`,
     reorderOverdueNote: "Past the reorder point — given your lead time, you may already be behind",
     reorderOverdueWithQty: (qty) => `Past due for reorder — order ~${qty} units now`,
+
+    snoozeLinkText: (count) => `🌙 ${count} snoozed products`,
+    snoozePlaceholder: "Snooze...",
+    snooze7Days: "Snooze 7 days",
+    snooze30Days: "Snooze 30 days",
+    snooze90Days: "Snooze 90 days",
+    snoozeIndefinite: "Snooze indefinitely",
+    snoozeSelectAriaLabel: "Snooze this product",
+    unsnoozeButton: "Unsnooze",
+    snoozedUntilLabel: (dateText) => `Snoozed until ${dateText}`,
+    snoozedIndefiniteLabel: "Snoozed indefinitely",
+    snoozedEmptyTitle: "No snoozed products",
+    snoozedEmptyDesc: "You can snooze out-of-season or intentionally unstocked products here to remove them from alert lists.",
 };
 
 export const DICTS: Record<Locale, Dictionary> = { tr, en };
