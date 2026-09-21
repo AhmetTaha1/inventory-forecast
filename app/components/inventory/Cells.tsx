@@ -63,6 +63,41 @@ export function TrendArrow(props: { trend: Trend | null; t: Dictionary }) {
   );
 }
 
+// Bilinçli kural: en fazla BİR "çip" + BİR ek satır. Tarih, güven notu ve
+// sipariş önerisini aynı anda üst üste yığmak (eski hâl) hem karmaşık
+// görünüyordu hem satırları tutarsız yükseklikte uzatıyordu. Aşağıdaki
+// öncelik sırası tek bir ek satıra karar veriyor: "süre geçti" uyarısı >
+// sipariş önerisi (tarihle birleşik) > güven notu > düz tarih.
+function pickSecondaryLine(args: {
+  days: number;
+  overdue: boolean;
+  reorderQty: number | null | undefined;
+  confidenceNote: string | null;
+  dateText: string;
+  t: Dictionary;
+}): ReactNode {
+  const { overdue, reorderQty, confidenceNote, dateText, t } = args;
+  const hasQty = reorderQty != null && reorderQty > 0;
+
+  if (overdue) {
+    return (
+      <span className="invf-note" style={{ color: "#C4210B" }}>
+        {hasQty ? t.reorderOverdueWithQty(reorderQty as number) : t.reorderOverdueNote}
+      </span>
+    );
+  }
+  if (hasQty) {
+    return <span className="invf-sub">{t.reorderQtyByDate(reorderQty as number, dateText)}</span>;
+  }
+  if (confidenceNote) {
+    return <span className="invf-note">{confidenceNote}</span>;
+  }
+  if (args.days > 0) {
+    return <span className="invf-sub">{t.runwayAround(dateText)}</span>;
+  }
+  return null;
+}
+
 export function RunwayCell(props: {
   days: number;
   confidence: string;
@@ -73,23 +108,14 @@ export function RunwayCell(props: {
   reorderByDays?: number | null;
 }) {
   const { days, t, locale, reorderQty, reorderByDays } = props;
-  const note = confidenceText(props.confidence, t);
+  const confidenceNote = confidenceText(props.confidence, t);
+  // stockoutInDays<=0 iken reorderByDays de (leadTimeDays her zaman >=1
+  // olduğu için) matematiksel olarak her zaman negatiftir — yani "bugün
+  // tükeniyor" durumunda, ayar yapılmışsa her zaman "süre geçti" demektir.
+  const overdue = reorderByDays != null && reorderByDays <= 0;
+  const dateText = stockoutDateText(Math.max(days, 0), locale);
 
-  // Tedarik süresi ayarlandıysa: önerilen miktar + (varsa) "süre geçti"
-  // uyarısı. İkisi de RunwayCell'in iki dalı (bugün / gelecek bir gün)
-  // arasında ortak, tekrar yazmamak için burada tek seferlik hazırlanıyor.
-  const reorderInfo = (
-    <>
-      {reorderQty != null && reorderQty > 0 && (
-        <span className="invf-sub">{t.reorderQtySuggestion(reorderQty)}</span>
-      )}
-      {reorderByDays != null && reorderByDays <= 0 && (
-        <span className="invf-note" style={{ color: "#C4210B" }}>
-          {t.reorderOverdueNote}
-        </span>
-      )}
-    </>
-  );
+  const secondaryLine = pickSecondaryLine({ days, overdue, reorderQty, confidenceNote, dateText, t });
 
   // 0 güne yuvarlanan tahmin "≈0 gün sonra" olarak okunuyordu; düz cümleye çevrildi.
   if (days <= 0) {
@@ -98,14 +124,17 @@ export function RunwayCell(props: {
         <span className="invf-days-chip" style={{ background: "#FEE9E8", color: "#C4210B" }}>
           {t.runwayToday}
         </span>
-        {note && <span className="invf-note">{note}</span>}
-        {reorderInfo}
+        {secondaryLine}
       </div>
     );
   }
 
-  const bg = days <= 7 ? "#FEE9E8" : days <= 21 ? "#FFF4E0" : "#E3F1DF";
-  const fg = days <= 7 ? "#C4210B" : days <= 21 ? "#8A5A00" : "#0C5132";
+  // Aciliyet rengi artık SADECE kalan güne değil, sipariş ayarına göre de
+  // belirleniyor: tedarik süresi göz önüne alındığında zaten geç
+  // kalınmışsa (overdue), çip her zaman kırmızı — "≈21 gün" gibi sakin
+  // görünen bir sayı ile altındaki kırmızı uyarı çelişmesin diye.
+  const bg = overdue || days <= 7 ? "#FEE9E8" : days <= 21 ? "#FFF4E0" : "#E3F1DF";
+  const fg = overdue || days <= 7 ? "#C4210B" : days <= 21 ? "#8A5A00" : "#0C5132";
 
   return (
     <div>
@@ -113,9 +142,7 @@ export function RunwayCell(props: {
         ≈{days}
         <small>{t.runwayDaysSuffix}</small>
       </span>
-      <span className="invf-sub">{t.runwayAround(stockoutDateText(days, locale))}</span>
-      {note && <span className="invf-note">{note}</span>}
-      {reorderInfo}
+      {secondaryLine}
     </div>
   );
 }
