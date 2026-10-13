@@ -8,9 +8,16 @@ generator client {
 // Note that some adapters may set a maximum length for the String type by default, please ensure your strings are long
 // enough when changing adapters.
 // See https://www.prisma.io/docs/orm/reference/prisma-schema-reference#string for more information
+// url artık sabit DEĞİL, ortam değişkeninden geliyor. Sabit "file:dev.sqlite"
+// üretimde ciddi bir sorundu: veritabanı dosyası container'ın geçici
+// katmanında yaşadığı için her yeniden dağıtım/yeniden başlatmada mağaza
+// ayarları, tedarikçiler, tedarik süresi override'ları ve oturumlar
+// siliniyordu — üstelik kod değiştirmeden başka bir veritabanına geçmek
+// mümkün değildi. Yerel geliştirme aynen devam ediyor: .env içindeki
+// DATABASE_URL="file:dev.sqlite" ile birebir eski davranış.
 datasource db {
-  provider = "sqlite"
-  url      = "file:dev.sqlite"
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 model Session {
@@ -31,6 +38,11 @@ model Session {
   emailVerified Boolean?  @default(false)
   refreshToken        String?
   refreshTokenExpires DateTime?
+
+  // Oturumlar hem Shopify oturum deposu tarafından hem de uninstall
+  // webhook'unda mağaza adına göre sorgulanıyor; birincil anahtar `id`
+  // olduğu için bu sorgular indekssizdi (tam tablo taraması).
+  @@index([shop])
 }
 
 model ForecastSnapshot {
@@ -57,6 +69,13 @@ model ShopSettings {
   // sipariş ayarları yapılmamış bir mağaza için de erkenden (tur
   // görüldüğünde) oluşturulabiliyor — onboardedAt'tan bağımsız bir alan.
   tourSeenAt   DateTime?
+  // YENİ: sayfa başına AYRI turlar (bkz. SpotlightTour.tsx) — ürün detay
+  // sayfası ve sipariş ayarları sayfası çok sayıda yeni bölüm kazanınca
+  // ("her biri kendi başına anlaşılması zor" — kullanıcı geri bildirimi)
+  // her biri kendi kısa, SADECE İLK ZİYARETTE gösterilen turunu aldı.
+  // tourSeenAt'tan (ana panel) bağımsız, aynı mantık.
+  detailsTourSeenAt  DateTime?
+  settingsTourSeenAt DateTime?
 }
 
 // "Ertele" (snooze) — kalıcı bir mute yerine SÜRELİ erteleme (bkz.
@@ -72,4 +91,91 @@ model SnoozedVariant {
   createdAt   DateTime  @default(now())
 
   @@unique([shop, variantId])
+}
+
+// Satır içi tedarik süresi override — IFH'den esinlenildi (bkz.
+// ifh_competitor_ideas memory). ShopSettings'teki mağaza-geneli
+// leadTimeDays/coverageDays varsayılanı KALIYOR; bu tablo sadece TEK bir
+// varyant için o varsayılanı ezen bir istisna tutuyor. İkisi de null
+// olamaz — en az biri set edilmemişse satır zaten hiç oluşturulmamalı
+// (bkz. variantOverrides.server.ts: ikisi de temizlenince satır silinir).
+model VariantLeadTimeOverride {
+  shop         String
+  variantId    String
+  leadTimeDays Int?
+  coverageDays Int?
+  // Bu override hangi tedarikçi PRESET'inden geldi. Veritabanı seviyesinde
+  // CANLI bir foreign key DEĞİL: leadTimeDays atama anında tedarikçiden
+  // KOPYALANIYOR (bkz. suppliers.server.ts: assignSupplierToVariant).
+  // Tedarikçi sonradan düzenlenirse, bu sütun sayesinde ona atanmış tüm
+  // ürünlerin leadTimeDays'i de güncelleniyor (bkz. updateSupplier);
+  // tedarikçi silinirse sadece bu sütun null'lanıyor, kopyalanmış
+  // leadTimeDays olduğu gibi kalıyor.
+  supplierId   String?
+  updatedAt    DateTime @updatedAt
+
+  @@id([shop, variantId])
+  // Tedarikçi sayfasındaki "kaç ürüne atandı" sayacı ve tedarikçi
+  // silme/düzenleme işlemleri bu sütuna göre filtreliyor.
+  @@index([shop, supplierId])
+}
+
+// Tedarikçi PRESET'i — Sensible-tarzı rakipten esinlenildi (bkz.
+// lead_time_and_snooze_ideas memory: "lead time ships WITH a supplier
+// record, not as a bare number"). Bir mağaza birden fazla tedarikçi
+// tanımlayıp her birine bir lead time atayabilir, sonra ürünlere "bu
+// tedarikçiden" diyerek o lead time'ı tek tıkla kopyalayabilir — elle her
+// seferinde sayı yazmak yerine.
+model Supplier {
+  id           String   @id @default(cuid())
+  shop         String
+  name         String
+  leadTimeDays Int
+  createdAt    DateTime @default(now())
+
+  @@index([shop])
+}
+
+// Günlük e-posta özeti tercihleri (bkz. digest.server.ts). Kayıt yoksa
+// digest kapalı sayılır — varsayılan davranış "gönderme", opt-in.
+// lastSentDate "YYYY-MM-DD" (mağaza saat diliminde) — aynı gün için iki kez
+// göndermemek adına, ayrı bir job-lock tablosuna gerek kalmadan.
+model DigestPreference {
+  shop         String    @id
+  enabled      Boolean   @default(false)
+  recipient    String
+  lastSentDate String?
+}
+// ---------------------------------------------------------------------------
+// TAHMİN KARNESİ
+//
+// Rakip analizinde (bkz. competitive_landscape memory) kategorinin en büyük
+// güven sorunu "kara kutu" şikâyeti: mağaza sahipleri tahminlere güvenmiyor,
+// hatta "verileri Shopify ile tekrar kontrol ediyoruz" diyorlar. Hiçbir rakip
+// kendi isabetini ölçüp göstermiyor.
+//
+// ÖLÇÜLEN ŞEY, BİLEREK "tükenme tarihi" DEĞİL: uygulama işe yaradığında
+// mağaza sahibi sipariş verir ve ürün zaten tükenmez — yani tükenme tahmini
+// "tutmaz" ama bu bir başarıdır, hata değil. Onun yerine SATIŞ HIZI tahmini
+// ölçülüyor: "günde ~2 adet satar" dedik, ufuk dolduğunda gerçekte ne oldu.
+// Bu, stok hareketlerinden bağımsız olarak her zaman ölçülebilir ve asıl
+// güven sorusunu ("bu sayılara güvenebilir miyim?") doğrudan cevaplıyor.
+//
+// Bir varyant için aynı anda en fazla BİR açık tahmin tutuluyor (bkz.
+// forecastAccuracy.server.ts) — 15 dakikada bir çalışan yenileme her
+// seferinde satır açsaydı tablo şişerdi.
+model ForecastAccuracy {
+  id                 String    @id @default(cuid())
+  shop               String
+  variantId          String
+  productTitle       String
+  predictedAt        DateTime  @default(now())
+  horizonDays        Int
+  predictedDailyRate Float
+  // Ufuk dolup ölçüm yapılana kadar null.
+  actualDailyRate    Float?
+  checkedAt          DateTime?
+
+  @@index([shop, checkedAt])
+  @@index([shop, variantId])
 }

@@ -1,3 +1,21 @@
 .cache
 build
 node_modules
+
+# SIRLAR: Dockerfile'daki "COPY . ." bunları dışarıda bırakmazsa imajın
+# İÇİNE gömülür (veritabanı şifresi, SEED_TOKEN). İmajı yerelden derleyen
+# platformlarda (ör. Fly.io `fly deploy`) bu gerçek bir sızıntı olur; imaj
+# kayıt defterine de yüklenir. Üretimde değerler platformun ortam
+# değişkenlerinden gelmeli.
+.env
+.env.*
+!.env.example
+
+# Üretimde işe yaramayan ve/veya hassas yerel dosyalar
+.git
+snapshot.json
+seed-catalog-plan.json
+scripts
+prisma/*.sqlite
+prisma/*.sqlite-journal
+database.sqlite
