@@ -31,6 +31,15 @@ const DEFAULT_REORDER_SETTINGS: ReorderSettings = {
     coverageDays: DEFAULT_COVERAGE_DAYS,
 };
 
+// --- YENİ (sağlık skoru): 4 kademeli, açıklanabilir bir özet sinyal.
+// Kategori sistemi (out/soon/dead/nodata) zaten var ama kaba (4 kova) —
+// health score aynı olguları 0-100 arası tek bir sayıya indirip mağaza
+// sahibinin "bu ürün genel olarak ne durumda" sorusuna tek bakışta cevap
+// vermesini sağlıyor. "Plain math, not black box" ilkesiyle (bkz.
+// ifh_competitor_ideas), formül burada TAMAMEN açık — gizli bir ML modeli
+// veya ayarlanamaz sihirli katsayılar yok. ---
+export type HealthLabel = "healthy" | "watch" | "at_risk" | "critical";
+
 // --- Elenme sebebi: motora hiç girmeyen varyantlar için ---
 export type ExclusionReason = "gift_card" | "archived" | "not_tracked";
 
@@ -52,6 +61,32 @@ export type VariantForecast = {
     // için (insufficient_data) öneri de üretilemiyor.
     reorderByDays: number | null; // negatifse: sipariş için ZATEN gecikilmiş demek
     suggestedReorderQty: number | null; // leadTime + coverage süresini karşılayacak, mevcut stok düşülmüş miktar
+    // YENİ (detaylı grafik): "YYYY-MM-DD" -> o gün satılan adet. Ham veri —
+    // hesaplanmış dailyRate/trend'in aksine, ürün detay grafiğinin satış
+    // geçmişi çizgisini/çubuklarını çizebilmesi için ayıklanmadan taşınıyor.
+    // Hiç satış kaydı yoksa null (confidence "insufficient" ile aynı durum).
+    salesByDay: Record<string, number> | null;
+    // YENİ (çoklu lokasyon): lokasyon adı -> o lokasyondaki stok adedi.
+    // Tek lokasyonlu mağazalarda tek bir anahtar olur — UI bu durumda
+    // dağılımı hiç göstermiyor (bkz. ProductCharts.tsx: LocationBreakdown).
+    byLocation: Record<string, number>;
+    // true ise mağazada çok sayıda lokasyon var ve bazıları (nadir, çok
+    // büyük mağaza senaryosu) sorgu sayfalama sınırı yüzünden dahil
+    // edilemedi — dürüstçe "eksik olabilir" sinyali.
+    levelsTruncated: boolean;
+    // YENİ (sağlık skoru): 0-100, formül computeHealthScore()'da açık.
+    healthScore: number;
+    healthLabel: HealthLabel;
+    // YENİ (satır içi tedarik süresi düzenleme): bu varyant için GERÇEKTEN
+    // kullanılan değerler — mağaza varsayılanı mı yoksa ürüne özel bir
+    // override mı olduğunu UI'ın bilmesine gerek yok, sadece "şu an
+    // kullanılan sayı bu" yeterli (bkz. ProductRow.tsx inline input).
+    effectiveLeadTimeDays: number;
+    effectiveCoverageDays: number;
+    // true ise effectiveLeadTimeDays mağaza varsayılanı DEĞİL, bu varyanta
+    // özel bir override — UI'da "özel" rozeti + "varsayılana dön" seçeneği
+    // bunu kullanıyor.
+    leadTimeOverridden: boolean;
 };
 
 export type ForecastResult = {
@@ -172,13 +207,64 @@ function computeTrend(sales: VariantSales | undefined, now: Date): Trend | null 
     return "flat";
 }
 
+// --- YENİ (sağlık skoru): 3 bileşenli, ağırlıklı, tamamen açık formül.
+// - confidence (%25): veri ne kadar güvenilir?
+// - trend (%15): satış yönü nereye gidiyor?
+// - coverage (%60, en ağırlıklı — asıl soru "tükeniyor mu?"): stockoutInDays,
+//   hedeflenen (leadTime+coverage) süreye oranla ne kadar rahat?
+// Üstüne iki düz ceza: sipariş için zaten gecikilmişse (-20), tek seferlik
+// anormal bir satış tespit edildiyse (-5, "bu veriye tam güvenme" notu).
+function computeHealthScore(args: {
+    confidence: Confidence;
+    trend: Trend | null;
+    stockoutInDays: number | null;
+    available: number;
+    targetDays: number; // leadTimeDays + coverageDays
+    overdue: boolean;
+    oneOffDetected: boolean;
+    method: string;
+}): { score: number; label: HealthLabel } {
+    const confidenceScore = { normal: 100, low: 50, insufficient: 0 }[args.confidence];
+    const trendScore = args.trend == null ? 70 : { up: 100, flat: 70, down: 40 }[args.trend];
+
+    // "stockoutInDays == null" iki BAMBAŞKA durumdan gelebilir — ikisini
+    // aynı nötr 50 puana koymak yanlıştı: "insufficient_data" gerçekten
+    // bilmiyoruz demek (nötr doğru), ama "no_recent_sales" (ölü stok)
+    // TAM TERSİNE net ve kötü bir sinyal — ürün hiç satmıyor, parası
+    // stokta kilitli kalıyor. Eskiden bu durum "watch" gibi masum bir
+    // etikete denk gelebiliyordu, oysa "Ölü Stok" kategorisindeki bir
+    // ürünün sağlık rozetinin de bunu yansıtması gerekiyor.
+    let coverageScore: number;
+    if (args.available === 0) {
+        coverageScore = 0; // zaten tükenmiş — tartışmasız en kötü durum
+    } else if (args.method === "no_recent_sales") {
+        coverageScore = 15; // ölü stok — veri eksik değil, net kötü bir durum
+    } else if (args.stockoutInDays == null) {
+        coverageScore = 50; // gerçekten veri yetersiz, ne iyi ne kötü diyemiyoruz
+    } else {
+        coverageScore = Math.max(0, Math.min(100, (args.stockoutInDays / args.targetDays) * 100));
+    }
+
+    let score = 0.25 * confidenceScore + 0.15 * trendScore + 0.6 * coverageScore;
+    if (args.overdue) score -= 20;
+    if (args.oneOffDetected) score -= 5;
+    score = Math.round(Math.max(0, Math.min(100, score)));
+
+    const label: HealthLabel = score >= 75 ? "healthy" : score >= 50 ? "watch" : score >= 25 ? "at_risk" : "critical";
+    return { score, label };
+}
+
 // --- Ana giriş noktası. `now` test edilebilirlik için parametre — vermezsen
 // bugünün tarihi kullanılır. `settings` verilmezse önceki sabit davranış
-// (14 günlük eşik) korunur — bkz. DEFAULT_REORDER_SETTINGS. ---
+// (14 günlük eşik) korunur — bkz. DEFAULT_REORDER_SETTINGS. `overridesByVariant`
+// (YENİ, satır içi düzenleme) her varyant için `settings`'i kısmen ezer —
+// örn. sadece leadTimeDays'i override edip coverageDays'i mağaza
+// varsayılanında bırakmak mümkün. ---
 export function computeForecast(
     snapshot: SalesSnapshot,
     now: Date = new Date(),
     settings: ReorderSettings = DEFAULT_REORDER_SETTINGS,
+    overridesByVariant?: Map<string, Partial<ReorderSettings>>,
 ): ForecastResult {
     const forecasts: VariantForecast[] = [];
     const excluded: ForecastResult["excluded"] = [];
@@ -198,6 +284,15 @@ export function computeForecast(
         const sales: VariantSales | undefined = snapshot.sales.get(v.variantId);
         const confidence = computeConfidence(sales, now);
         const oneOffDetected = detectOneOff(sales);
+
+        // YENİ (satır içi tedarik süresi): bu varyanta özel bir override
+        // varsa mağaza varsayılanının üstüne kısmen (leadTime VEYA
+        // coverage, ikisi birden olmak zorunda değil) uygulanıyor.
+        const override = overridesByVariant?.get(v.variantId);
+        const effectiveSettings: ReorderSettings = {
+            leadTimeDays: override?.leadTimeDays ?? settings.leadTimeDays,
+            coverageDays: override?.coverageDays ?? settings.coverageDays,
+        };
 
         // YENİ (tedarik süresi): dailyRate artık stok 0 olsa bile (veri
         // yeterliyse) hesaplanıyor — aksi halde tükenmiş bir ürün için
@@ -232,12 +327,25 @@ export function computeForecast(
         // sürece üretiliyor, aksi halde (insufficient_data) null kalıyor.
         const reorderByDays =
             stockoutInDays != null
-                ? Math.round((stockoutInDays - settings.leadTimeDays) * 10) / 10
+                ? Math.round((stockoutInDays - effectiveSettings.leadTimeDays) * 10) / 10
                 : null;
         const suggestedReorderQty =
             dailyRate != null && dailyRate > 0
-                ? Math.max(0, Math.ceil(dailyRate * (settings.leadTimeDays + settings.coverageDays) - v.available))
+                ? Math.max(0, Math.ceil(dailyRate * (effectiveSettings.leadTimeDays + effectiveSettings.coverageDays) - v.available))
                 : null;
+
+        const trend = computeTrend(sales, now);
+        const overdue = reorderByDays != null && reorderByDays <= 0;
+        const health = computeHealthScore({
+            confidence,
+            trend,
+            stockoutInDays,
+            available: v.available,
+            targetDays: effectiveSettings.leadTimeDays + effectiveSettings.coverageDays,
+            overdue,
+            oneOffDetected,
+            method,
+        });
 
         forecasts.push({
             variantId: v.variantId,
@@ -252,11 +360,91 @@ export function computeForecast(
             available: v.available,
             method,
             imageUrl: v.imageUrl, // <-- YENİ
-            trend: computeTrend(sales, now), // <-- YENİ
+            trend, // <-- YENİ
             reorderByDays, // <-- YENİ
             suggestedReorderQty, // <-- YENİ
+            salesByDay: sales ? sales.byDay : null, // <-- YENİ (detaylı grafik)
+            byLocation: v.byLocation, // <-- YENİ (çoklu lokasyon)
+            levelsTruncated: v.levelsTruncated, // <-- YENİ
+            healthScore: health.score, // <-- YENİ
+            healthLabel: health.label, // <-- YENİ
+            effectiveLeadTimeDays: effectiveSettings.leadTimeDays, // <-- YENİ
+            effectiveCoverageDays: effectiveSettings.coverageDays, // <-- YENİ
+            leadTimeOverridden: override?.leadTimeDays != null, // <-- YENİ
         });
     }
 
     return { forecasts, excluded };
+}
+
+// ---------------------------------------------------------------------------
+// YENİ (çok pencereli sipariş tahmini): Sensible-tarzı rakipten esinlenildi
+// (bkz. lead_time_and_snooze_ideas memory: "show 2-3 estimates side-by-side
+// from different historical windows... lets the merchant sanity-check
+// instead of blindly trusting a black box"). computeForecast()'taki TEK
+// ağırlıklı (7/30/90 karışımı) dailyRate'in aksine, burada her pencere
+// TAMAMEN BAĞIMSIZ hesaplanıyor — "son 14 günde ne kadar hızlı satıyordu"
+// ile "son 90 günde ne kadar hızlı satıyordu" arasındaki farkı görebilsin.
+// Girdi sadece salesByDay (VariantForecast'ta zaten var) — ayrı bir
+// SalesSnapshot gerekmiyor, bu yüzden ürün detay sayfasından doğrudan
+// çağrılabiliyor.
+export type WindowEstimate = {
+    windowDays: number;
+    dailyRate: number | null; // null = bu pencerede hiç veri yok
+    suggestedReorderQty: number | null;
+};
+
+const REORDER_ESTIMATE_WINDOWS = [14, 30, 60, 90];
+
+export function computeWindowEstimates(
+    salesByDay: Record<string, number> | null,
+    now: Date,
+    available: number,
+    settings: ReorderSettings,
+): WindowEstimate[] {
+    if (!salesByDay) {
+        return REORDER_ESTIMATE_WINDOWS.map((windowDays) => ({ windowDays, dailyRate: null, suggestedReorderQty: null }));
+    }
+    const entries = Object.entries(salesByDay);
+
+    return REORDER_ESTIMATE_WINDOWS.map((windowDays) => {
+        const inWindow = entries.filter(([day]) => daysSince(day, now) < windowDays);
+        if (inWindow.length === 0) return { windowDays, dailyRate: null, suggestedReorderQty: null };
+
+        const oldestAge = Math.max(...inWindow.map(([day]) => daysSince(day, now)));
+        const effectiveWindow = Math.max(1, Math.min(windowDays, oldestAge + 1));
+        const sum = inWindow.reduce((s, [, qty]) => s + qty, 0);
+        const dailyRate = sum / effectiveWindow;
+        const suggestedReorderQty = Math.max(0, Math.ceil(dailyRate * (settings.leadTimeDays + settings.coverageDays) - available));
+        return { windowDays, dailyRate, suggestedReorderQty };
+    });
+}
+
+// ---------------------------------------------------------------------------
+// YENİ ("Simulate" — büyüme senaryosu): IFH'den esinlenildi (bkz.
+// ifh_competitor_ideas memory: "let the merchant enter an expected growth %
+// ... and see the forecast adjust"). Mevcut dailyRate'e düz bir büyüme
+// oranı uygulayıp stockoutInDays/suggestedReorderQty'yi YENİDEN hesaplıyor
+// — ikinci bir Shopify sorgusu YOK, tamamen mevcut sayılar üzerinden. UI
+// bunu istemci tarafında (her tuş vuruşunda) çağırabilir, bu yüzden saf ve
+// senkron.
+export type SimulationResult = {
+    adjustedDailyRate: number;
+    stockoutInDays: number | null;
+    suggestedReorderQty: number | null;
+};
+
+export function simulateGrowth(
+    dailyRate: number,
+    available: number,
+    growthPercent: number,
+    settings: ReorderSettings,
+): SimulationResult {
+    const adjustedDailyRate = Math.max(0, dailyRate * (1 + growthPercent / 100));
+    const stockoutInDays = adjustedDailyRate > 0 ? Math.round((available / adjustedDailyRate) * 10) / 10 : null;
+    const suggestedReorderQty =
+        adjustedDailyRate > 0
+            ? Math.max(0, Math.ceil(adjustedDailyRate * (settings.leadTimeDays + settings.coverageDays) - available))
+            : null;
+    return { adjustedDailyRate, stockoutInDays, suggestedReorderQty };
 }

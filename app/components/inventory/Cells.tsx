@@ -79,18 +79,37 @@ function pickSecondaryLine(args: {
   const { overdue, reorderQty, confidenceNote, dateText, t } = args;
   const hasQty = reorderQty != null && reorderQty > 0;
 
+  // "Kaba tahmin — satış geçmişi az" uyarısı ÖNCEDEN sadece sipariş miktarı
+  // YOKKEN gösteriliyordu (öncelik sıralı tek satır). Yani uyarı, tam da en
+  // gerekli olduğu anda gizleniyordu: elimizde 2 günlük veri varken "90 adet
+  // sipariş ver" gibi büyük ve somut bir sayı gösterilip, o sayının ne kadar
+  // zayıf bir veriye dayandığı hiç söylenmiyordu. Mağaza sahibinin gereksiz
+  // stok almasına yol açabilecek en riskli durum buydu; artık sayı ile uyarı
+  // BİRLİKTE gösteriliyor.
+  const confidenceLine = confidenceNote ? (
+    <span className="invf-note">{confidenceNote}</span>
+  ) : null;
+
   if (overdue) {
     return (
-      <span className="invf-note" style={{ color: "#C4210B" }}>
-        {hasQty ? t.reorderOverdueWithQty(reorderQty as number) : t.reorderOverdueNote}
-      </span>
+      <>
+        <span className="invf-note" style={{ color: "#C4210B" }}>
+          {hasQty ? t.reorderOverdueWithQty(reorderQty as number) : t.reorderOverdueNote}
+        </span>
+        {confidenceLine}
+      </>
     );
   }
   if (hasQty) {
-    return <span className="invf-sub">{t.reorderQtyByDate(reorderQty as number, dateText)}</span>;
+    return (
+      <>
+        <span className="invf-sub">{t.reorderQtyByDate(reorderQty as number, dateText)}</span>
+        {confidenceLine}
+      </>
+    );
   }
-  if (confidenceNote) {
-    return <span className="invf-note">{confidenceNote}</span>;
+  if (confidenceLine) {
+    return confidenceLine;
   }
   if (args.days > 0) {
     return <span className="invf-sub">{t.runwayAround(dateText)}</span>;
@@ -106,6 +125,10 @@ export function RunwayCell(props: {
   // Sipariş ayarları yapılmışsa dolu, yoksa null (bkz. ProductRow.tsx).
   reorderQty?: number | null;
   reorderByDays?: number | null;
+  // Ucretsiz katmanda miktar sunucuda silindi ama BIR SEY oldugu
+  // belirtilmeli — aksi halde kullanici o ozelligin varligindan
+  // hic haberdar olmaz (bkz. app._index.tsx: stripDetailOnlyFields).
+  reorderQtyLocked?: boolean;
 }) {
   const { days, t, locale, reorderQty, reorderByDays } = props;
   const confidenceNote = confidenceText(props.confidence, t);
@@ -116,6 +139,9 @@ export function RunwayCell(props: {
   const dateText = stockoutDateText(Math.max(days, 0), locale);
 
   const secondaryLine = pickSecondaryLine({ days, overdue, reorderQty, confidenceNote, dateText, t });
+  const lockedHint = props.reorderQtyLocked ? (
+    <span className="invf-qty-locked">🔒 {t.reorderQtyLockedHint}</span>
+  ) : null;
 
   // 0 güne yuvarlanan tahmin "≈0 gün sonra" olarak okunuyordu; düz cümleye çevrildi.
   if (days <= 0) {
@@ -125,6 +151,7 @@ export function RunwayCell(props: {
           {t.runwayToday}
         </span>
         {secondaryLine}
+        {lockedHint}
       </div>
     );
   }
@@ -143,6 +170,7 @@ export function RunwayCell(props: {
         <small>{t.runwayDaysSuffix}</small>
       </span>
       {secondaryLine}
+      {lockedHint}
     </div>
   );
 }

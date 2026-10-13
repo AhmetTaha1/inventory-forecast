@@ -21,6 +21,15 @@ export function buildCategoryMeta(t: Dictionary): CategoryMetaMap {
       soft: "#FFF4E0",
       text: "#7A5100",
     },
+    // Yeşil bilerek: "iyi durum" sinyali. ALL_PRODUCTS_ACCENT (#008060) ile
+    // karışmasın diye ondan belirgin biçimde daha açık/yumuşak bir ton.
+    healthy: {
+      label: t.categoryHealthyLabel,
+      hint: t.categoryHealthyHint,
+      accent: "#2E8B57",
+      soft: "#E8F5EE",
+      text: "#1B5E3A",
+    },
     dead: {
       label: t.categoryDeadLabel,
       hint: t.categoryDeadHint,

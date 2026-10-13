@@ -57,9 +57,14 @@ const SHOP_QUERY = `#graphql
     }
   }`;
 
+// Sayfa boyutu 50 DEĞİL 250 (Shopify'ın izin verdiği azami): 3.000 varyantlı
+// bir mağazada 60 ardışık istek yerine 12 istek demek. Maliyet endişesi
+// gerçek mağazada ÖLÇÜLDÜ, varsayılmadı: first:250 + inventoryLevels(first:50)
+// = 299 istenen / 79 gerçek maliyet (2000'lik kovadan) — yani iç içe
+// bağlantılar korkulduğu gibi çarpan etkisi yaratmıyor, bolca yer var.
 const VARIANTS_QUERY = `#graphql
   query InvVariants($cursor: String) {
-    productVariants(first: 50, after: $cursor) {
+    productVariants(first: 250, after: $cursor) {
       pageInfo { hasNextPage endCursor }
       nodes {
         id
@@ -89,7 +94,7 @@ const VARIANT_INVENTORY_LEVELS_QUERY = `#graphql
   query InvVariantLevels($id: ID!, $cursor: String) {
     productVariant(id: $id) {
       inventoryItem {
-        inventoryLevels(first: 50, after: $cursor) {
+        inventoryLevels(first: 250, after: $cursor) {
           pageInfo { hasNextPage endCursor }
           nodes {
             location { id name }
@@ -102,6 +107,16 @@ const VARIANT_INVENTORY_LEVELS_QUERY = `#graphql
 
 const LINE_ITEM_FIELDS = `quantity currentQuantity variant { id } product { id }`;
 
+// Kullanıcı geri bildirimi (2026-09-22): 249 ürünlü bir mağazada "Yenile"
+// 25 saniye sürdü. Kök neden: bazı siparişlerde çok sayıda kalem varken
+// (bir günün TÜM ürün satışları TEK siparişte toplanmış — seed script'inin
+// dev store sipariş limiti için yaptığı bir optimizasyon) lineItems(first: 25)
+// küçük kaldığı için 190 kalemli bir sipariş TEK BAŞINA birden fazla ekstra
+// ağ isteği (ORDER_LINE_ITEMS_QUERY döngüsü) gerektiriyordu. Gerçek bir
+// sorguyla ölçüldü: orders(first:25){lineItems(first:250)} maliyeti sadece
+// 218/2000 (bkz. commit notu) — "iç içe sorgu maliyeti çarpımsal patlar"
+// varsayımı YANLIŞTI, ölçmeden temkinli davranmak yerine gerçek maliyeti
+// test ettik. 250, Shopify'ın da pratik üst sınırı.
 const ORDERS_QUERY = `#graphql
   query InvOrders($cursor: String, $q: String!) {
     orders(first: 25, after: $cursor, sortKey: PROCESSED_AT, query: $q) {
@@ -111,7 +126,7 @@ const ORDERS_QUERY = `#graphql
         name
         processedAt
         cancelledAt
-        lineItems(first: 25) {
+        lineItems(first: 250) {
           pageInfo { hasNextPage endCursor }
           nodes { ${LINE_ITEM_FIELDS} }
         }
@@ -122,7 +137,7 @@ const ORDERS_QUERY = `#graphql
 const ORDER_LINE_ITEMS_QUERY = `#graphql
   query InvOrderLineItems($id: ID!, $cursor: String) {
     order(id: $id) {
-      lineItems(first: 100, after: $cursor) {
+      lineItems(first: 250, after: $cursor) {
         pageInfo { hasNextPage endCursor }
         nodes { ${LINE_ITEM_FIELDS} }
       }
@@ -156,11 +171,30 @@ function toShopDay(isoUtc: string, timeZone: string): string {
     }).format(new Date(isoUtc));
 }
 
-export async function fetchSalesSnapshot(admin: Admin, days = 365): Promise<SalesSnapshot> {
-    // --- YENİ (Adım 5): mağaza saat dilimini bir kere çek ---
-    const shopData = await gql(admin, SHOP_QUERY, {});
-    const shopTimezone: string = shopData.shop?.ianaTimezone ?? "UTC";
-
+// --- YENİ (ölçeklenebilirlik, 2026-09-22): 1000+ ürünlü/yıllarca geçmişi
+// olan bir mağazada bu fonksiyonun kaç saniye süreceğini HER ZAMAN
+// öngörülebilir/optimum tutmak için iki yapısal karar:
+//
+// 1) Varsayılan geçmiş penceresi 365 -> 100 GÜNE indirildi. forecast.ts'in
+//    kullandığı en uzun pencere 90 gün (WINDOW_WEIGHTS) ve confidence
+//    kontrolü sadece "ilk satış >= 30 gün önce mi" diye bakıyor (tam tarihe
+//    değil) — yani 100 gün, motorun ihtiyaç duyduğu HER ŞEYİ zaten kapsıyor.
+//    Yıllarca geçmişi olan bir mağaza artık her "Yenile"de gereksiz yere
+//    yüzlerce eski siparişi bir daha çekmiyor.
+// 2) Varyant sayfalaması ve sipariş sayfalaması BİRBİRİNDEN BAĞIMSIZ iki
+//    zincir (ayrı cursor'lar) — önceden sırayla (önce tüm varyantlar, SONRA
+//    tüm siparişler) çekiliyordu. Cursor tabanlı sayfalama kendi İÇİNDE
+//    sıralı olmak ZORUNDA (sayfa 2'nin cursor'ı sayfa 1'den gelir), ama bu
+//    İKİ ZİNCİR birbirini beklemek zorunda değil — Promise.all ile paralel
+//    çalıştırılınca toplam süre yaklaşık YARIYA iniyor (round-trip gecikmesi
+//    baskın maliyet olduğu için, ölçülen gerçek sorgu maliyetleri 2000'lik
+//    kovanın çok altında kalıyor, throttle darboğaz değil).
+//
+// Daha da büyük mağazalar (binlerce sipariş/çok yıllık geçmiş) için asıl
+// doğru çözüm Shopify'ın Bulk Operations API'si (sunucu tarafında asenkron
+// JSONL dökümü) — bu, canlı sayfalamanın yerini alacak bir sonraki adım,
+// şimdilik kapsam dışı (bkz. forecastCache.server.ts'teki ilgili not).
+export async function fetchSalesSnapshot(admin: Admin, days = 100): Promise<SalesSnapshot> {
     const since = new Date(Date.now() - days * 86_400_000).toISOString().slice(0, 10);
     const stats: SalesSnapshot["stats"] = {
         variantPages: 0, orderPages: 0, ordersSeen: 0, ordersCancelled: 0,
@@ -168,60 +202,106 @@ export async function fetchSalesSnapshot(admin: Admin, days = 365): Promise<Sale
         extraLineItemFetches: 0, extraInventoryLevelFetches: 0,
     };
 
-    // --- 1) Varyantlar + stok (sayfalı) ---
-    const variants = new Map<string, VariantInfo>();
-    let cursor: string | null = null;
-    do {
-        const data = await gql(admin, VARIANTS_QUERY, { cursor });
-        stats.variantPages++;
-        const conn = data.productVariants;
-        for (const v of conn.nodes) {
-            const levels = v.inventoryItem?.inventoryLevels;
-            const byLocation: Record<string, number> = {};
-            let available = 0;
-            const addLevels = (nodes: any[]) => {
-                for (const lvl of nodes ?? []) {
-                    const q = lvl.quantities.find((x: any) => x.name === "available")?.quantity ?? 0;
-                    byLocation[lvl.location.name] = q;
-                    available += q;
+    async function fetchAllVariants(): Promise<Map<string, VariantInfo>> {
+        const variants = new Map<string, VariantInfo>();
+        let cursor: string | null = null;
+        do {
+            const data = await gql(admin, VARIANTS_QUERY, { cursor });
+            stats.variantPages++;
+            const conn = data.productVariants;
+            for (const v of conn.nodes) {
+                const levels = v.inventoryItem?.inventoryLevels;
+                const byLocation: Record<string, number> = {};
+                let available = 0;
+                const addLevels = (nodes: any[]) => {
+                    for (const lvl of nodes ?? []) {
+                        const q = lvl.quantities.find((x: any) => x.name === "available")?.quantity ?? 0;
+                        byLocation[lvl.location.name] = q;
+                        available += q;
+                    }
+                };
+                addLevels(levels?.nodes);
+
+                // 250'den fazla lokasyonlu varyant: kalanını ayrıca çek, sessizce kesme
+                // (ORDER_LINE_ITEMS_QUERY'deki taşan-sipariş deseniyle aynı mantık).
+                let levelsCursor = levels?.pageInfo?.hasNextPage ? levels.pageInfo.endCursor : null;
+                while (levelsCursor) {
+                    stats.extraInventoryLevelFetches++;
+                    const d = await gql(admin, VARIANT_INVENTORY_LEVELS_QUERY, { id: v.id, cursor: levelsCursor });
+                    const extra = d.productVariant?.inventoryItem?.inventoryLevels;
+                    addLevels(extra?.nodes);
+                    levelsCursor = extra?.pageInfo?.hasNextPage ? extra.pageInfo.endCursor : null;
                 }
-            };
-            addLevels(levels?.nodes);
 
-            // 50'den fazla lokasyonlu varyant: kalanını ayrıca çek, sessizce kesme
-            // (ORDER_LINE_ITEMS_QUERY'deki 25+ kalemli sipariş deseniyle aynı mantık).
-            let levelsCursor = levels?.pageInfo?.hasNextPage ? levels.pageInfo.endCursor : null;
-            while (levelsCursor) {
-                stats.extraInventoryLevelFetches++;
-                const d = await gql(admin, VARIANT_INVENTORY_LEVELS_QUERY, { id: v.id, cursor: levelsCursor });
-                const extra = d.productVariant?.inventoryItem?.inventoryLevels;
-                addLevels(extra?.nodes);
-                levelsCursor = extra?.pageInfo?.hasNextPage ? extra.pageInfo.endCursor : null;
+                variants.set(v.id, {
+                    variantId: v.id,
+                    variantTitle: v.title,
+                    productId: v.product.id,
+                    productTitle: v.product.title,
+                    status: v.product.status,
+                    tracked: v.inventoryItem?.tracked ?? false,
+                    isGiftCard: v.product.isGiftCard ?? false,
+                    imageUrl: v.product.featuredImage?.url ?? null,
+                    available,
+                    byLocation,
+                    // Artık tüm sayfalar çekildiği için bu her zaman false olmalı —
+                    // true çıkarsa sayfalama döngüsünde bir hata var demektir (kanarya).
+                    levelsTruncated: false,
+                });
             }
+            cursor = conn.pageInfo.hasNextPage ? conn.pageInfo.endCursor : null;
+        } while (cursor);
+        return variants;
+    }
 
-            variants.set(v.id, {
-                variantId: v.id,
-                variantTitle: v.title,
-                productId: v.product.id,
-                productTitle: v.product.title,
-                status: v.product.status,
-                tracked: v.inventoryItem?.tracked ?? false,
-                isGiftCard: v.product.isGiftCard ?? false, // <-- YENİ (Adım 5)
-                imageUrl: v.product.featuredImage?.url ?? null, // <-- YENİ
-                available,
-                byLocation,
-                // Artık tüm sayfalar çekildiği için bu her zaman false olmalı —
-                // true çıkarsa sayfalama döngüsünde bir hata var demektir (kanarya).
-                levelsTruncated: false,
-            });
-        }
-        cursor = conn.pageInfo.hasNextPage ? conn.pageInfo.endCursor : null;
-    } while (cursor);
+    // Siparişleri HAM haliyle topluyoruz (henüz gün'e çevrilmemiş) — mağaza
+    // saat dilimi (shopTimezone) ayrı, PARALEL giden bir sorgudan geliyor;
+    // bu sayede sipariş sayfalamasını timezone sonucunu beklemeden hemen
+    // başlatabiliyoruz.
+    type RawOrder = { id: string; processedAt: string; cancelledAt: string | null; lineItems: any };
+    async function fetchAllOrders(): Promise<RawOrder[]> {
+        const orders: RawOrder[] = [];
+        let cursor: string | null = null;
+        const q = `processed_at:>=${since}`;
+        do {
+            const data = await gql(admin, ORDERS_QUERY, { cursor, q });
+            stats.orderPages++;
+            const conn = data.orders;
+            for (const order of conn.nodes) {
+                stats.ordersSeen++;
+                if (order.cancelledAt) { stats.ordersCancelled++; continue; }
 
-    // --- 2) Siparişler (sayfalı) ---
+                let items = order.lineItems.nodes;
+                // 250'den fazla kalemli sipariş: kalanını ayrıca çek, sessizce kesme
+                let liCursor = order.lineItems.pageInfo.hasNextPage ? order.lineItems.pageInfo.endCursor : null;
+                while (liCursor) {
+                    stats.extraLineItemFetches++;
+                    const d = await gql(admin, ORDER_LINE_ITEMS_QUERY, { id: order.id, cursor: liCursor });
+                    items = items.concat(d.order.lineItems.nodes);
+                    liCursor = d.order.lineItems.pageInfo.hasNextPage ? d.order.lineItems.pageInfo.endCursor : null;
+                }
+                orders.push({ id: order.id, processedAt: order.processedAt, cancelledAt: order.cancelledAt, lineItems: items });
+            }
+            cursor = conn.pageInfo.hasNextPage ? conn.pageInfo.endCursor : null;
+        } while (cursor);
+        return orders;
+    }
+
+    // Bağımsız üç istek zinciri (timezone / varyantlar / siparişler) PARALEL —
+    // hiçbiri diğerinin sonucuna bağlı değil, sadece SONRASINDAKİ işleme
+    // (gün'e çevirme) shopTimezone'a ihtiyaç duyuyor.
+    const [shopData, variants, rawOrders] = await Promise.all([
+        gql(admin, SHOP_QUERY, {}),
+        fetchAllVariants(),
+        fetchAllOrders(),
+    ]);
+    const shopTimezone: string = shopData.shop?.ianaTimezone ?? "UTC";
+
     const sales = new Map<string, VariantSales>();
-    const addLineItems = (items: any[], day: string) => {
-        for (const li of items) {
+    for (const order of rawOrders) {
+        // DEĞİŞTİ (Adım 5): UTC slice yerine mağaza saat dilimine göre gün
+        const day = toShopDay(order.processedAt, shopTimezone);
+        for (const li of order.lineItems) {
             stats.lineItemsSeen++;
             stats.refundedOrRemovedUnits += li.quantity - li.currentQuantity;
             if (!li.variant) { stats.lineItemsNoVariant++; continue; } // silinmiş varyant / özel kalem
@@ -230,32 +310,7 @@ export async function fetchSalesSnapshot(admin: Admin, days = 365): Promise<Sale
             s.byDay[day] = (s.byDay[day] ?? 0) + li.currentQuantity;
             sales.set(li.variant.id, s);
         }
-    };
-
-    cursor = null;
-    const q = `processed_at:>=${since}`;
-    do {
-        const data = await gql(admin, ORDERS_QUERY, { cursor, q });
-        stats.orderPages++;
-        const conn = data.orders;
-        for (const order of conn.nodes) {
-            stats.ordersSeen++;
-            if (order.cancelledAt) { stats.ordersCancelled++; continue; }
-            // DEĞİŞTİ (Adım 5): UTC slice yerine mağaza saat dilimine göre gün
-            const day = toShopDay(order.processedAt, shopTimezone);
-            addLineItems(order.lineItems.nodes, day);
-
-            // 25'ten fazla kalemli sipariş: kalanını ayrıca çek, sessizce kesme
-            let liCursor = order.lineItems.pageInfo.hasNextPage ? order.lineItems.pageInfo.endCursor : null;
-            while (liCursor) {
-                stats.extraLineItemFetches++;
-                const d = await gql(admin, ORDER_LINE_ITEMS_QUERY, { id: order.id, cursor: liCursor });
-                addLineItems(d.order.lineItems.nodes, day);
-                liCursor = d.order.lineItems.pageInfo.hasNextPage ? d.order.lineItems.pageInfo.endCursor : null;
-            }
-        }
-        cursor = conn.pageInfo.hasNextPage ? conn.pageInfo.endCursor : null;
-    } while (cursor);
+    }
 
     return { since, shopTimezone, variants, sales, stats };
 }

@@ -8,18 +8,23 @@ import { FeedbackButton } from "../components/FeedbackButton";
 import { LoadingScreen } from "../components/LoadingScreen";
 import { resolveLocale, getDictionary, type Dictionary, type Locale } from "../lib/translations";
 import { buildCategoryMeta } from "../lib/inventory/categoryMeta";
-import { CATEGORY_ORDER, PAGE_SIZE, URGENT_DAYS } from "../lib/inventory/constants";
+import { CATEGORY_ORDER, PAGE_SIZE, URGENT_DAYS, FREE_PLAN_PRODUCT_LIMIT, PAID_PLAN_PRODUCT_LIMIT } from "../lib/inventory/constants";
 import { PAGE_CSS } from "../lib/inventory/styles";
 import { dimStyle } from "../lib/inventory/format";
 import { useInventoryView } from "../hooks/useInventoryView";
 import { AlertBox } from "../components/inventory/AlertBox";
 import { SummaryCard } from "../components/inventory/SummaryCard";
 import { AllProductsCard } from "../components/inventory/AllProductsCard";
+import { TopSellersCard } from "../components/inventory/TopSellersCard";
+import { AccuracyCard, ACCURACY_CARD_CSS } from "../components/inventory/AccuracyCard";
 import { RefreshBar } from "../components/inventory/RefreshBar";
 import { ProductRow } from "../components/inventory/ProductRow";
+import { ExportMenu } from "../components/inventory/ExportMenu";
 import { getShopSettings, hasTourBeenSeen } from "../lib/shopSettings.server";
 import { WelcomeTour } from "../components/WelcomeTour";
 import { getActiveSnoozes } from "../lib/snooze.server";
+import { resolvePlanTier } from "../lib/partnerBilling.server";
+import { getAccuracyScorecard, type AccuracyScorecard } from "../lib/forecastAccuracy.server";
 import type { Category } from "../types/inventory";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -41,13 +46,51 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   // ile akışla yerine geliyor. Önceden bu satırdaki `await` tüm sayfayı
   // veri hazır olana kadar bomboş bekletiyordu (kullanıcı geri bildirimi:
   // ilk açılışta uzun süre boş/donuk beyaz ekran).
+  // Plan katmani promise'in DISINDA cozuluyor: sonuc 10 dakika onbellekli
+  // (bkz. partnerBilling.server.ts), yani ek bir Partner API cagrisi degil.
+  const { tier: planTier, planUrl } = await resolvePlanTier(admin);
+
   const dashboardPromise = (async () => {
-    const [{ groups, computedAt, fromCache }, snoozes, shopSettings, tourSeen] = await Promise.all([
+    const [{ groups, computedAt, fromCache }, snoozes, shopSettings, tourSeen, scorecard] = await Promise.all([
       getForecastGroups(session.shop, admin, { forceRefresh }),
       getActiveSnoozes(session.shop),
       getShopSettings(session.shop),
       hasTourBeenSeen(session.shop),
+      // Karne, forecast yazimiyla paralel okunuyor: en fazla bir yenileme
+      // dongusu geriden gelir, 14 gunluk bir olcumde bu onemsiz.
+      // Tahmin karnesi premium ozellik — ucretsiz katmanda hic sorgulanmiyor.
+      planTier === "paid" ? getAccuracyScorecard(session.shop) : Promise.resolve(null),
     ]);
+
+    // Panonun tarayıcıya gönderdiği yükten, panonun HİÇ kullanmadığı ağır
+    // alanları çıkarıyoruz. `salesByDay` tek başına kaydın yarısından
+    // fazlası (249 üründe 346 KB'lık yükün ~%52'si) ve sadece ürün DETAY
+    // sayfasındaki grafiklerde kullanılıyor — o sayfanın da kendi sunucu
+    // loader'ı var, veriyi oradan taze alıyor. `byLocation`/`levelsTruncated`
+    // de aynı şekilde yalnızca detay sayfasında. Bunlar panodan çıkınca
+    // özellikle mobil bağlantıda indirilen ve ayrıştırılan veri yarıdan
+    // fazla azalıyor.
+    function stripDetailOnlyFields<T extends object>(item: T) {
+      const { salesByDay, byLocation, levelsTruncated, ...rest } = item as T & {
+        salesByDay?: unknown;
+        byLocation?: unknown;
+        levelsTruncated?: unknown;
+      };
+
+      // Sipariş MİKTARI premium. Sadece gizlemek yetmez — değeri istemciye
+      // göndermeyip yerine bir bayrak koyuyoruz. Böylece hem gerçekten
+      // kapalı oluyor, hem de satırda "burada bir şey var ama kilitli"
+      // ipucunu gösterebiliyoruz (bayrak olmadan ücretsiz kullanıcı o
+      // özelliğin varlığından haberdar olamazdı).
+      // reorderByDays BİLEREK kalıyor: "sipariş için süre geçti" uyarısı ve
+      // kırmızı aciliyet rengi ücretsiz sürümün vaadinin parçası ("ne zaman").
+      if (!canSeeReorderQty) {
+        const r = rest as { suggestedReorderQty?: number | null; reorderQtyLocked?: boolean };
+        if (r.suggestedReorderQty != null && r.suggestedReorderQty > 0) r.reorderQtyLocked = true;
+        r.suggestedReorderQty = null;
+      }
+      return rest;
+    }
 
     // Erteleme, pahalı ForecastSnapshot yeniden hesaplamasının DIŞINDA,
     // ayrı ve ucuz bir tabloda tutuluyor (bkz. snooze.server.ts) — burada
@@ -67,11 +110,13 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
     const outOfStockSplit = splitSnoozed(groups.outOfStock, "out");
     const soonToStockoutSplit = splitSnoozed(groups.soonToStockout, "soon");
+    const healthySplit = splitSnoozed(groups.healthy, "healthy");
     const insufficientDataSplit = splitSnoozed(groups.insufficientData, "nodata");
     const deadStockSplit = splitSnoozed(groups.deadStock, "dead");
     const snoozedRows = [
       ...outOfStockSplit.snoozed,
       ...soonToStockoutSplit.snoozed,
+      ...healthySplit.snoozed,
       ...insufficientDataSplit.snoozed,
       ...deadStockSplit.snoozed,
     ];
@@ -79,6 +124,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     // saymamalı — mağaza sahibi bilerek "bunu şimdilik önemseme" dediği bir
     // ürün için uyarı almaya devam etmesin diye erteledi zaten.
     const reorderAlerts = groups.reorderAlerts.filter((f) => !snoozes.has(f.variantId));
+    // En çok satanlar da aynı sebeple ertelenmiş ürünleri hariç tutuyor —
+    // burada dublicate göstermenin bir anlamı yok, kategorilerden (out/soon/
+    // dead/nodata) bağımsız ayrı bir liste olduğu için splitSnoozed'a hiç
+    // gerek yok, doğrudan filtrelemek yeterli.
+    const topSellers = groups.topSellers.filter((f) => !snoozes.has(f.variantId));
 
     // Sipariş ayarları (tedarik süresi) hiç yapılmamışsa (onboardedAt yok)
     // panelde bir hatırlatma kartı gösteriyoruz VE ürün satırlarındaki
@@ -86,17 +136,64 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     // varsayılan (14 gün) değerlere göre üretilmiş bir sayı, kullanıcı bunu
     // hiç görmeyi/onaylamayı seçmeden sessizce panelde belirirdi.
     const hasReorderSettings = shopSettings?.onboardedAt != null;
+    // Siparis MIKTARI onerisi premium ozellik: ucretsiz surum "ne" ve
+    // "ne zaman" bitecegini soyluyor, "ne kadar siparis vermeli"yi
+    // premium soyluyor. Kontrol SUNUCUDA: miktar istemciye hic
+    // gonderilmiyor, sadece gizlenmis olmuyor.
+    const canSeeReorderQty = planTier === "paid" && hasReorderSettings;
+
+    // ---- Ücretsiz katman sınırı ------------------------------------------
+    // Ücretsiz katmanda takip edilen ürün sayısı sınırlı. Rastgele kesmek
+    // yerine ACİLİYET SIRASINA göre dolduruyoruz: stoğu bitenler ve sipariş
+    // zamanı gelenler her zaman sınırın içinde kalır, "şimdilik yapacak bir
+    // şey olmayanlar" (stok yeterli) en son sırada. Böylece ücretsiz
+    // deneyim "bozuk" değil, sadece eksik oluyor — mağaza sahibi en kritik
+    // ürünlerini yine de görüyor.
+    const budget = { left: planTier === "free" ? FREE_PLAN_PRODUCT_LIMIT : PAID_PLAN_PRODUCT_LIMIT };
+    const take = <T,>(items: T[]): T[] => {
+      if (budget.left === Number.POSITIVE_INFINITY) return items;
+      const slice = items.slice(0, Math.max(0, budget.left));
+      budget.left -= slice.length;
+      return slice;
+    };
+
+    const totalTracked =
+      outOfStockSplit.visible.length +
+      soonToStockoutSplit.visible.length +
+      deadStockSplit.visible.length +
+      insufficientDataSplit.visible.length +
+      healthySplit.visible.length;
+
+    const outOfStockShown = take(outOfStockSplit.visible);
+    const soonShown = take(soonToStockoutSplit.visible);
+    const deadShown = take(deadStockSplit.visible);
+    const noDataShown = take(insufficientDataSplit.visible);
+    const healthyShown = take(healthySplit.visible);
+    const shownCount =
+      outOfStockShown.length + soonShown.length + deadShown.length + noDataShown.length + healthyShown.length;
 
     return {
-      outOfStock: outOfStockSplit.visible,
-      soonToStockout: soonToStockoutSplit.visible,
-      insufficientData: insufficientDataSplit.visible,
-      deadStock: deadStockSplit.visible,
-      reorderAlerts,
-      snoozedRows,
+      outOfStock: outOfStockShown.map(stripDetailOnlyFields),
+      soonToStockout: soonShown.map(stripDetailOnlyFields),
+      healthy: healthyShown.map(stripDetailOnlyFields),
+      insufficientData: noDataShown.map(stripDetailOnlyFields),
+      deadStock: deadShown.map(stripDetailOnlyFields),
+      reorderAlerts: reorderAlerts.map(stripDetailOnlyFields),
+      topSellers: topSellers.map(stripDetailOnlyFields),
+      snoozedRows: snoozedRows.map((row) => ({ ...row, item: stripDetailOnlyFields(row.item) })),
       computedAt: computedAt.toISOString(),
       fromCache,
       hasReorderSettings,
+      canSeeReorderQty,
+      scorecard,
+      planTier,
+      planUrl,
+      freeLimit: {
+        limited: totalTracked > shownCount,
+        shown: shownCount,
+        total: totalTracked,
+        limit: planTier === "free" ? FREE_PLAN_PRODUCT_LIMIT : PAID_PLAN_PRODUCT_LIMIT,
+      },
       // Karşılama turu SADECE ilk açılışta gösterilecek — sunucuda kalıcı
       // olarak işaretleniyor (bkz. shopSettings.server.ts), bir daha asla çıkmaz.
       showTour: !tourSeen,
@@ -128,13 +225,20 @@ type InventoryItem = any;
 type IndexContentProps = {
   outOfStock: InventoryItem[];
   soonToStockout: InventoryItem[];
+  healthy: InventoryItem[];
   insufficientData: InventoryItem[];
   deadStock: InventoryItem[];
   reorderAlerts: InventoryItem[];
+  topSellers: InventoryItem[];
   snoozedRows: { item: InventoryItem; category: Category; snoozeUntil: Date | string | null }[];
   computedAt: string;
   fromCache: boolean;
   hasReorderSettings: boolean;
+  canSeeReorderQty: boolean;
+  planTier: "free" | "paid";
+  scorecard: AccuracyScorecard | null;
+  freeLimit: { limited: boolean; shown: number; total: number; limit: number };
+  planUrl: string | null;
   showTour: boolean;
   locale: Locale;
   t: Dictionary;
@@ -143,13 +247,20 @@ type IndexContentProps = {
 function IndexContent({
   outOfStock,
   soonToStockout,
+  healthy,
   insufficientData,
   deadStock,
   reorderAlerts,
+  topSellers,
   snoozedRows,
   computedAt,
   fromCache,
   hasReorderSettings,
+  canSeeReorderQty,
+  planTier,
+  scorecard,
+  freeLimit,
+  planUrl,
   showTour,
   locale,
   t,
@@ -187,24 +298,31 @@ function IndexContent({
     isScrolling,
     showSnoozed,
     snoozedCount,
+    showTopSellers,
+    topSellersCount,
+    reorderTodayCount,
   } = useInventoryView({
     outOfStock,
     soonToStockout,
+    healthy,
     deadStock,
     insufficientData,
     reorderAlerts,
+    topSellers,
     snoozedRows,
     computedAt,
     locale,
     t,
     categoryMeta,
-    hasReorderSettings,
+    // Export'taki siparis miktari sutunu da premium — hook bu bayragi
+    // o sutunu doldurmak icin kullaniyor (bkz. buildExportRows).
+    hasReorderSettings: canSeeReorderQty,
   });
 
   return (
     <>
       <s-page heading={t.pageHeading}>
-        <style>{PAGE_CSS}</style>
+        <style>{PAGE_CSS + ACCURACY_CARD_CSS}</style>
 
         <s-stack gap="base">
           <RefreshBar
@@ -245,6 +363,22 @@ function IndexContent({
                 bir daha hiç görünmüyor. Zorunlu bir yönlendirme/engelleme
                 DEĞİL: ücretsiz katmandaki hiçbir özellik buna bağlı değil,
                 sadece isteyen mağaza sahibi sipariş önerilerini açabiliyor. */}
+            {/* Ücretsiz katman sınırı: yalnızca gerçekten kesme olduğunda
+                çıkıyor. Sınırın altındaki bir mağaza ücretsiz planda olduğunu
+                bile fark etmiyor — kimseye gereksiz "yükselt" baskısı
+                yapmıyoruz, sadece kesme yaşayan mağazaya durumu dürüstçe
+                söylüyoruz. */}
+            {freeLimit.limited && (
+              <AlertBox
+                tone="info"
+                title={t.freeLimitTitle(freeLimit.shown, freeLimit.total)}
+                description={t.freeLimitDesc(freeLimit.limit)}
+                actionLabel={planUrl ? t.freeLimitCta : undefined}
+                actionHref={planUrl ?? undefined}
+                actionExternal
+              />
+            )}
+
             {!hasReorderSettings && allRows.length > 0 && (
               <AlertBox
                 tone="info"
@@ -272,14 +406,55 @@ function IndexContent({
                 altında — 5. kart yapmak hem kavramsal karışıklık yaratırdı
                 (kategorilerin toplamı bir kategori değildir) hem de grid'in
                 "asla 3 sütuna düşmez" düzenini bozardı. */}
+            {/* "Tüm ürünler" + "En çok satanlar" yan yana (bkz. .invf-secondary-row) —
+                ikisi de 4'lü kategori grid'inin DIŞINDA (kategorilerin
+                toplamı/kesişimi bir kategori değil), ama üstteki grid'in
+                genişliğine sığacak şekilde 2 sütuna bölünmüş. En çok
+                satanlar count=0 ise (hiç satış geçmişi yoksa) "Tüm ürünler"
+                tek başına tam genişlik alıyor — boş bir "kutlama" kartı
+                göstermenin anlamı yok. */}
             {allRows.length > 0 && (
-              <AllProductsCard
-                count={allRows.length}
-                showingAll={!isFiltered}
-                t={t}
-                onClick={clearFilter}
-              />
+              <div
+                className={
+                  counts.healthy > 0 && topSellersCount > 0
+                    ? "invf-secondary-row invf-secondary-row--three"
+                    : "invf-secondary-row"
+                }
+              >
+                <AllProductsCard
+                  count={allRows.length}
+                  showingAll={!isFiltered}
+                  t={t}
+                  onClick={clearFilter}
+                  fullWidth={counts.healthy === 0 && topSellersCount === 0}
+                />
+                {/* "Stok yeterli": sipariş noktası henüz uzak olan ürünler.
+                    Sayısı 0 ise hiç gösterilmiyor — boş bir kart yer kaplar,
+                    bilgi vermez. */}
+                {counts.healthy > 0 && (
+                  <SummaryCard
+                    category="healthy"
+                    count={counts.healthy}
+                    active={filter === "healthy"}
+                    categoryMeta={categoryMeta}
+                    onClick={() => changeFilter("healthy")}
+                  />
+                )}
+                {topSellersCount > 0 && (
+                  <TopSellersCard
+                    count={topSellersCount}
+                    active={filter === "topSellers"}
+                    t={t}
+                    onClick={showTopSellers}
+                  />
+                )}
+              </div>
             )}
+
+            {/* Tahmin karnesi: sadece gercekten olculmus tahmin varsa
+                goruntuleniyor (ilk ~2 haftadan sonra). Bos bir karne
+                guven vermek yerine tam tersini yapardi. */}
+            {scorecard && <AccuracyCard scorecard={scorecard} t={t} />}
 
             <span className="invf-hint">{t.filterHint}</span>
 
@@ -291,7 +466,7 @@ function IndexContent({
                     <span style={{ fontSize: 16, fontWeight: 700, color: "#1A1A1A" }}>
                       {t.productsSectionTitle}
                     </span>
-                    <span style={{ fontSize: 13, color: "#5C5C5C" }}>
+                    <span style={{ fontSize: 13.5, fontWeight: 500, color: "#4A4A4A" }}>
                       {subtitleParts.join(" · ")}
                     </span>
                   </div>
@@ -302,15 +477,24 @@ function IndexContent({
                         {t.snoozeLinkText(snoozedCount)}
                       </button>
                     )}
-                    {filteredRows.length > 0 && (
-                      <button
-                        type="button"
-                        className="invf-export-btn"
-                        onClick={handleExport}
-                        title={t.excelTooltip(filterContextLabel, filteredRows.length)}
-                      >
-                        {t.excelButton(filteredRows.length)}
-                      </button>
+                    {/* Excel'e aktarma premium — ucretsiz katmanda menu hic
+                        render edilmiyor (yerine kucuk bir yukseltme linki). */}
+                    {canSeeReorderQty || planTier === "paid" ? (
+                    <ExportMenu
+                      onExport={handleExport}
+                      filteredCount={filteredRows.length}
+                      allCount={allRows.length}
+                      reorderTodayCount={reorderTodayCount}
+                      filterContextLabel={filterContextLabel}
+                      isFiltered={isFiltered}
+                      t={t}
+                    />
+                    ) : (
+                      planUrl && (
+                        <a href={planUrl} target="_top" className="invf-snoozed-link">
+                          {t.premiumLockExport} {t.premiumLockCta} →
+                        </a>
+                      )
                     )}
                     {isFiltered && (
                       <button type="button" className="invf-clear-btn" onClick={clearFilter}>
@@ -350,7 +534,7 @@ function IndexContent({
                   categoryMeta={categoryMeta}
                   t={t}
                   locale={locale}
-                  showReorderSuggestion={hasReorderSettings}
+                  showReorderSuggestion={canSeeReorderQty}
                   isSnoozed={filter === "snoozed"}
                   snoozeUntil={snoozeUntil}
                 />

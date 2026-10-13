@@ -11,6 +11,12 @@ type AlertBoxProps = {
   // Kendi rotalarımıza (ör. /app/settings) yönlendirme için — onAction'dan
   // farklı olarak gerçek bir <Link> render eder, JS click handler değil.
   actionHref?: string;
+  // Uygulama DIŞINA çıkan adresler için (ör. Shopify'ın plan seçim sayfası).
+  // İki şey şart: react-router'ın <Link>'i değil düz <a> (Link, harici
+  // mutlak adreste istemci tarafı yönlendirmeye çalışıp bozulur) ve
+  // target="_top" (aksi halde sayfa gömülü iframe'in İÇİNDE açılmaya
+  // çalışır ve Shopify admin'i çerçeveye sığdıramaz).
+  actionExternal?: boolean;
 };
 
 const ALERT_TONES: { [K in AlertTone]: { accent: string; soft: string; text: string; icon: string } } =
@@ -42,7 +48,13 @@ export function AlertBox(props: AlertBoxProps) {
         <span className="invf-alert-title">{props.title}</span>
         {props.description && <span className="invf-alert-desc">{props.description}</span>}
       </div>
-      {props.actionLabel && props.actionHref && (
+      {props.actionLabel && props.actionHref && props.actionExternal && (
+        <a href={props.actionHref} target="_top" className="invf-alert-btn">
+          {props.actionLabel}
+          <span aria-hidden="true">→</span>
+        </a>
+      )}
+      {props.actionLabel && props.actionHref && !props.actionExternal && (
         <Link to={props.actionHref} className="invf-alert-btn">
           {props.actionLabel}
           <span aria-hidden="true">→</span>

@@ -1,9 +1,10 @@
 import type { ReactNode } from "react";
+import { Link } from "react-router";
 import type { Dictionary, Locale } from "../../lib/translations";
 import type { Category, CategoryMetaMap } from "../../types/inventory";
-import { initials, productAdminId, rateText } from "../../lib/inventory/format";
+import { absoluteDateText, initials, productAdminId, rateText } from "../../lib/inventory/format";
 import { CellLabel, RunwayCell, StatusPill, TrendArrow } from "./Cells";
-import { SnoozeControl } from "./SnoozeControl";
+import { LeadTimeInlineEdit } from "./LeadTimeInlineEdit";
 
 type ProductRowProps = {
   item: any;
@@ -15,8 +16,12 @@ type ProductRowProps = {
   // hiç ayarlanmamış varsayılan değerlere göre üretilmiş öneriler
   // gösterilmiyor (bkz. app._index.tsx loader'daki hasReorderSettings notu).
   showReorderSuggestion: boolean;
-  // true ise bu satır "Ertelenmiş ürünler" görünümünde — SnoozeControl
-  // "ertele" seçeneği yerine "ertelemeyi kaldır"ı gösterir.
+  // true ise bu satır "Ertelenmiş ürünler" görünümünde — sadece bilgi
+  // amaçlı bir "ne zamana kadar ertelendi" notu gösteriyoruz; ertelemeyi
+  // yönetmek (kaldırmak/uzatmak) artık ürün detay sayfasında (bkz.
+  // app.product.$variantId.tsx) — satır artık interaktif bir <select>
+  // taşımıyor, kullanıcı geri bildirimi üzerine (durum sütunu 3 farklı
+  // özelliğin üst üste yığıldığı, karmaşık/sıkışık bir yer haline gelmişti).
   isSnoozed: boolean;
   snoozeUntil: Date | string | null;
 };
@@ -55,6 +60,7 @@ export function ProductRow({
         locale={locale}
         reorderQty={reorderQty}
         reorderByDays={reorderByDays}
+        reorderQtyLocked={Boolean(item.reorderQtyLocked)}
       />
     );
   } else if (category === "dead") {
@@ -67,6 +73,13 @@ export function ProductRow({
 
   const showVariant = item.variantTitle && item.variantTitle !== "Default Title";
   const isOut = item.available <= 0;
+  // item.variantId Shopify'ın tam GID'i ("gid://shopify/ProductVariant/123") —
+  // içinde "/" karakterleri olduğu için ÇÖZÜLMEMİŞ haliyle tek bir rota
+  // segmentine konulunca 404'e yol açıyordu (URL, kastedilenden fazla
+  // segmente bölünüyordu). encodeURIComponent tek bir segment garantiliyor;
+  // react-router parametreleri otomatik decode ettiği için loader'da
+  // (app.product.$variantId.tsx) params.variantId yine orijinal GID olarak gelir.
+  const detailsHref = `/app/product/${encodeURIComponent(item.variantId)}${locale ? `?locale=${locale}` : ""}`;
 
   return (
     <div className="invf-row" style={{ borderLeft: `3px solid ${meta.accent}` }}>
@@ -92,12 +105,12 @@ export function ProductRow({
           <img
             src={item.imageUrl}
             alt=""
-            width={36}
-            height={36}
+            width={40}
+            height={40}
             loading="lazy"
             style={{
-              width: 36,
-              height: 36,
+              width: 40,
+              height: 40,
               flexShrink: 0,
               borderRadius: 9,
               objectFit: "cover",
@@ -107,8 +120,8 @@ export function ProductRow({
         ) : (
           <span
             style={{
-              width: 36,
-              height: 36,
+              width: 40,
+              height: 40,
               flexShrink: 0,
               borderRadius: 9,
               display: "inline-flex",
@@ -138,13 +151,19 @@ export function ProductRow({
       <div className="invf-c-status">
         <CellLabel>{t.colStatus}</CellLabel>
         <StatusPill category={category} categoryMeta={categoryMeta} />
-        <SnoozeControl
-          variantId={item.variantId}
-          isSnoozed={isSnoozed}
-          snoozeUntil={snoozeUntil}
-          t={t}
-          locale={locale}
-        />
+        <Link to={detailsHref} className="invf-details-btn">
+          {t.detailsLinkLabel} →
+        </Link>
+        {/* Rozet + "Detaylar" arasında BİLEREK sonra geliyor — mobilde
+            (bkz. styles.ts .invf-c-status: flex-wrap) DOM sırası flex
+            satırlarının nasıl bölüneceğini belirliyor: rozet+buton her
+            zaman aynı ilk satırda kalsın, not (varsa) kendi satırına
+            düşsün diye en sonda. */}
+        {isSnoozed && (
+          <span className="invf-snoozed-until-note">
+            {snoozeUntil ? t.snoozedUntilLabel(absoluteDateText(new Date(snoozeUntil), locale)) : t.snoozedIndefiniteLabel}
+          </span>
+        )}
       </div>
 
       <div className="invf-c-stock">
@@ -166,6 +185,13 @@ export function ProductRow({
       <div className="invf-wide">
         <CellLabel>{t.colRunway}</CellLabel>
         {runway}
+        <LeadTimeInlineEdit
+          variantId={item.variantId}
+          productTitle={item.productTitle}
+          effectiveLeadTimeDays={item.effectiveLeadTimeDays}
+          isOverridden={Boolean(item.leadTimeOverridden)}
+          t={t}
+        />
       </div>
     </div>
   );

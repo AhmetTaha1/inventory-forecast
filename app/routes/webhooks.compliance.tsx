@@ -29,8 +29,17 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       break;
 
     case "SHOP_REDACT": {
+      // Mağaza bazlı TÜM tablolar temizleniyor — sadece ForecastSnapshot
+      // değil (önceki hâli eksikti): tedarik süresi override'ları, tedarikçi
+      // presetleri, ertelenen ürünler, e-posta özeti tercihi ve panel
+      // ayarları da mağaza kaldırıldığında silinmesi gereken veriler.
       const shopDomain = (payload as { shop_domain?: string })?.shop_domain ?? shop;
       await db.forecastSnapshot.deleteMany({ where: { shop: shopDomain } });
+      await db.snoozedVariant.deleteMany({ where: { shop: shopDomain } });
+      await db.variantLeadTimeOverride.deleteMany({ where: { shop: shopDomain } });
+      await db.supplier.deleteMany({ where: { shop: shopDomain } });
+      await db.digestPreference.deleteMany({ where: { shop: shopDomain } });
+      await db.shopSettings.deleteMany({ where: { shop: shopDomain } });
       await db.session.deleteMany({ where: { shop: shopDomain } });
       break;
     }

@@ -84,3 +84,32 @@ export async function markTourSeen(shop: string): Promise<void> {
         create: { shop, tourSeenAt: new Date() },
     });
 }
+
+// --- Sayfa başına turlar (ürün detay sayfası, sipariş ayarları sayfası) ---
+// hasTourBeenSeen/markTourSeen ile BİREBİR aynı desen, sadece farklı sütun.
+
+export async function hasDetailsTourBeenSeen(shop: string): Promise<boolean> {
+    const row = await prisma.shopSettings.findUnique({ where: { shop } });
+    return row?.detailsTourSeenAt != null;
+}
+
+export async function markDetailsTourSeen(shop: string): Promise<void> {
+    await prisma.shopSettings.upsert({
+        where: { shop },
+        update: { detailsTourSeenAt: new Date() },
+        create: { shop, detailsTourSeenAt: new Date() },
+    });
+}
+
+export async function hasSettingsTourBeenSeen(shop: string): Promise<boolean> {
+    const row = await prisma.shopSettings.findUnique({ where: { shop } });
+    return row?.settingsTourSeenAt != null;
+}
+
+export async function markSettingsTourSeen(shop: string): Promise<void> {
+    await prisma.shopSettings.upsert({
+        where: { shop },
+        update: { settingsTourSeenAt: new Date() },
+        create: { shop, settingsTourSeenAt: new Date() },
+    });
+}

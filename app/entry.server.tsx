@@ -5,6 +5,15 @@ import { createReadableStreamFromReadable } from "@react-router/node";
 import { type EntryContext } from "react-router";
 import { isbot } from "isbot";
 import { addDocumentResponseHeaders } from "./shopify.server";
+// Side-effect import: modül yüklendiğinde günlük digest zamanlayıcısını
+// başlatıyor (bkz. digestScheduler.server.ts). entry.server.tsx sunucu
+// süreci başladığında BİR KEZ import edilir, tekrar tekrar değil.
+import "./lib/digestScheduler.server";
+// Eksik ortam değişkenlerinin SESSİZCE yanlış davranışa yol açtığı yerleri
+// açılışta bildiriyor (bkz. envCheck.server.ts). Süreci çökertmez.
+import { checkEnvironment } from "./lib/envCheck.server";
+
+checkEnvironment();
 
 // YENİ: app._index.tsx artık ilk Shopify senkronizasyonunu (büyük
 // mağazalarda uzun sürebilir) akışla (streaming) getiriyor — sayfa kabuğu

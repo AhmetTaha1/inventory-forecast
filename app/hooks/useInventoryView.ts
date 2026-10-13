@@ -2,7 +2,7 @@ import type { CSSProperties } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useNavigation } from "react-router";
 import { intlLocale, type Dictionary, type Locale } from "../lib/translations";
-import { buildExportRows, downloadXlsx, slugifyFilterName } from "../lib/inventory/export";
+import { buildExportRows, categorizeReorderAlert, downloadXlsx, slugifyFilterName } from "../lib/inventory/export";
 import {
   PAGE_SIZE,
   SCROLL_IDLE_DELAY_MS,
@@ -20,8 +20,11 @@ import type { Category, CategoryMetaMap, Filter } from "../types/inventory";
 //   konuma düşülür — bu yüzden 44 hem yedek hem de "sıkışık" taban değer.
 const FLOATING_BUTTON_DEFAULT_OFFSET = 44;
 // Butonlar, ürün listesi kartının kenarından bu kadar dışarı taşıyor —
-// tam kenara yapışık değil ama ona görünüşte "ait" duruyor.
-const FLOATING_BUTTON_EDGE_GAP = 8;
+// tam kenara yapışık değil ama ona görünüşte "ait" duruyor. Sol (geri
+// bildirim) ve sağ (yukarı çık) İKİSİ DE bu AYNI değeri kullanıyor —
+// kullanıcı geri bildirimi: iki buton da listeye eşit uzaklıkta olmalı,
+// biri diğerinden daha fazla boşluk almasın.
+const FLOATING_BUTTON_EDGE_GAP = 20;
 // "Yukarı çık" her zaman 48x48 dairesel — sağ tarafta Shopify'ın kendi
 // arayüzünden (nav menüsü sadece SOLDA var) hiçbir risk yok, bu yüzden eşik
 // düşük tutulabilir: az bir boşluk bile "dışarı" yerleştirmek için yeterli.
@@ -40,9 +43,11 @@ type InventoryItem = any;
 type UseInventoryViewArgs = {
   outOfStock: InventoryItem[];
   soonToStockout: InventoryItem[];
+  healthy: InventoryItem[];
   deadStock: InventoryItem[];
   insufficientData: InventoryItem[];
   reorderAlerts: InventoryItem[];
+  topSellers: InventoryItem[];
   snoozedRows: { item: InventoryItem; category: Category; snoozeUntil: Date | string | null }[];
   computedAt: string;
   locale: Locale;
@@ -56,9 +61,11 @@ type UseInventoryViewArgs = {
 export function useInventoryView({
   outOfStock,
   soonToStockout,
+  healthy,
   deadStock,
   insufficientData,
   reorderAlerts,
+  topSellers,
   snoozedRows,
   computedAt,
   locale,
@@ -133,6 +140,17 @@ export function useInventoryView({
       const rect = listRef.current?.getBoundingClientRect();
       if (!rect) return;
 
+      // Yukarı çık butonu sabit boyutta (48px) olduğu için sağdaki boşluk
+      // her zaman tam isabetli hesaplanıyordu. Geri bildirim butonu ise
+      // metne göre genişliği DEĞİŞTİĞİ için (tr/en) sabit bir TAHMİN
+      // (FEEDBACK_BUTTON_ESTIMATED_WIDTH) kullanılıyordu — gerçek buton bu
+      // tahminden darsa, soldaki boşluk sağdakinden gözle görülür şekilde
+      // fazla çıkıyordu (kullanıcı geri bildirimi: iki boşluk eşit
+      // görünmüyor). DOM'dan GERÇEK genişliği ölçüp kullanıyoruz; buton
+      // henüz mount olmadıysa (ilk render) tahmine düşülüyor.
+      const feedbackEl = document.querySelector<HTMLElement>(".invf-fb-trigger");
+      const feedbackWidth = feedbackEl?.getBoundingClientRect().width ?? FEEDBACK_BUTTON_ESTIMATED_WIDTH;
+
       const marginLeft = rect.left;
       const marginRight = window.innerWidth - rect.right;
       const rightCramped = marginRight < RIGHT_OUTSIDE_MIN_MARGIN;
@@ -141,7 +159,7 @@ export function useInventoryView({
       setFloatingOffsets({
         left: leftCramped
           ? FLOATING_BUTTON_DEFAULT_OFFSET
-          : marginLeft - FEEDBACK_BUTTON_ESTIMATED_WIDTH - FLOATING_BUTTON_EDGE_GAP,
+          : marginLeft - feedbackWidth - FLOATING_BUTTON_EDGE_GAP,
         right: rightCramped
           ? FLOATING_BUTTON_DEFAULT_OFFSET
           : marginRight - SCROLL_TOP_BUTTON_SIZE - FLOATING_BUTTON_EDGE_GAP,
@@ -183,28 +201,40 @@ export function useInventoryView({
     () => [
       ...outOfStock.map((item) => ({ item, category: "out" as Category, snoozeUntil: null as Date | string | null })),
       ...soonToStockout.map((item) => ({ item, category: "soon" as Category, snoozeUntil: null as Date | string | null })),
+      ...healthy.map((item) => ({ item, category: "healthy" as Category, snoozeUntil: null as Date | string | null })),
       ...deadStock.map((item) => ({ item, category: "dead" as Category, snoozeUntil: null as Date | string | null })),
       ...insufficientData.map((item) => ({ item, category: "nodata" as Category, snoozeUntil: null as Date | string | null })),
     ],
-    [outOfStock, soonToStockout, deadStock, insufficientData],
+    [outOfStock, soonToStockout, healthy, deadStock, insufficientData],
   );
 
   const counts: { [K in Category]: number } = {
     out: outOfStock.length,
     soon: soonToStockout.length,
+    healthy: healthy.length,
     dead: deadStock.length,
     nodata: insufficientData.length,
   };
 
-  // "snoozed" filtresi seçiliyken kaynak allRows değil snoozedRows —
-  // ertelenmiş ürünler zaten ana listelerden (allRows'un beslendiği 4
-  // kategori) çıkarılmış durumda (bkz. app._index.tsx loader'ı).
+  // En çok satanlar kategorilerden BAĞIMSIZ bir liste (bkz. types/inventory.ts) —
+  // her ürünün GERÇEK kategorisi (out/soon/dead/nodata) StatusPill'in doğru
+  // rozeti göstermesi için categorizeReorderAlert ile geri hesaplanıyor
+  // (aynı yardımcı, export preset'lerindeki "Bugün sipariş edilecekler" ile
+  // birebir aynı mantık: already_out_of_stock -> "out", diğer her şey "soon").
+  const topSellerRows = useMemo(
+    () => topSellers.map((item) => ({ item, category: categorizeReorderAlert(item), snoozeUntil: null as Date | string | null })),
+    [topSellers],
+  );
+
+  // "snoozed"/"topSellers" filtresi seçiliyken kaynak allRows değil özel
+  // listeleri — ertelenmiş ürünler zaten ana listelerden (allRows'un
+  // beslendiği 4 kategori) çıkarılmış durumda (bkz. app._index.tsx loader'ı).
   const filteredRows = useMemo(() => {
     const q = query.trim().toLocaleLowerCase(intlLocale(locale));
-    const source = filter === "snoozed" ? snoozedRows : allRows;
+    const source = filter === "snoozed" ? snoozedRows : filter === "topSellers" ? topSellerRows : allRows;
     return source.filter(({ item, category }) => {
-      if (filter === "snoozed") {
-        // Kaynak zaten yalnızca ertelenmiş satırlar, ek kategori kontrolü gerekmiyor.
+      if (filter === "snoozed" || filter === "topSellers") {
+        // Kaynak zaten sadece ilgili satırlar, ek kategori kontrolü gerekmiyor.
       } else if (filter === "urgent") {
         const urgent =
           category === "out" ||
@@ -217,7 +247,7 @@ export function useInventoryView({
       const haystack = `${item.productTitle} ${item.variantTitle}`.toLocaleLowerCase(intlLocale(locale));
       return haystack.includes(q);
     });
-  }, [allRows, snoozedRows, filter, query, locale]);
+  }, [allRows, snoozedRows, topSellerRows, filter, query, locale]);
 
   const totalPages = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
@@ -263,9 +293,33 @@ export function useInventoryView({
     scrollToList();
   }
 
-  function handleExport() {
-    const rows = buildExportRows(filteredRows, t, locale, categoryMeta, hasReorderSettings);
-    const label = slugifyFilterName(filter, t, categoryMeta);
+  function showTopSellers() {
+    setFilter("topSellers");
+    setQueryInput("");
+    setQuery("");
+    setPage(1);
+    scrollToList();
+  }
+
+  // YENİ (akıllı export preset'leri, bkz. ifh_competitor_ideas): tek bir
+  // "o an görünen listeyi indir" butonu yerine 3 seçenek. "filtered"
+  // önceki davranışın birebir aynısı (varsayılan/tek tık).
+  function handleExport(preset: "filtered" | "all" | "reorderToday" = "filtered") {
+    let sourceRows: { item: InventoryItem; category: Category }[];
+    let label: string;
+
+    if (preset === "all") {
+      sourceRows = allRows;
+      label = slugifyFilterName("all", t, categoryMeta);
+    } else if (preset === "reorderToday") {
+      sourceRows = reorderAlerts.map((item) => ({ item, category: categorizeReorderAlert(item) }));
+      label = t.filenameReorderToday;
+    } else {
+      sourceRows = filteredRows;
+      label = slugifyFilterName(filter, t, categoryMeta);
+    }
+
+    const rows = buildExportRows(sourceRows, t, locale, categoryMeta, hasReorderSettings);
     const dateStr = new Date().toISOString().slice(0, 10);
     downloadXlsx(rows, `${t.filenamePrefix}-${label}-${dateStr}.xlsx`);
   }
@@ -297,7 +351,9 @@ export function useInventoryView({
         ? t.urgentFilterLabel
         : filter === "snoozed"
           ? t.snoozedFilterLabel
-          : categoryMeta[filter].label;
+          : filter === "topSellers"
+            ? t.topSellersFilterLabel
+            : categoryMeta[filter].label;
   const isFiltered = activeFilterLabel !== null || trimmedQuery.length > 0;
 
   const subtitleParts: string[] = [];
@@ -370,7 +426,10 @@ export function useInventoryView({
     clearFilter,
     showUrgent,
     showSnoozed,
+    showTopSellers,
+    topSellersCount: topSellers.length,
     snoozedCount: snoozedRows.length,
+    reorderTodayCount: reorderAlerts.length,
     handleExport,
     lastUpdated,
     alertDescription,

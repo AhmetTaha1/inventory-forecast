@@ -18,5 +18,17 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   // gerek yok, veri minimizasyonu için uninstall anında silmek daha doğru.
   await db.forecastSnapshot.deleteMany({ where: { shop } });
 
+  // Günlük e-posta özeti tercihi de siliniyor. Önceden kalıyordu ve iki
+  // ayrı soruna yol açıyordu:
+  // 1) Zamanlayıcı (bkz. digestScheduler.server.ts) bu mağazayı her gün
+  //    "gönderilecekler" listesine alıyor, oturum olmadığı için gönderim
+  //    patlıyor, bu yüzden "bugün gönderildi" işareti hiç konmuyor ve
+  //    mağaza SONSUZA KADAR her turda yeniden deneniyordu — kaldıran her
+  //    mağaza için kalıcı, birikimli bir yük.
+  // 2) Uygulama sonradan yeniden kurulursa, yeni kuran kişinin hiç
+  //    onaylamadığı ESKİ bir adrese (ör. işten ayrılmış bir çalışan)
+  //    e-posta göndermeye kendiliğinden devam ediyordu.
+  await db.digestPreference.deleteMany({ where: { shop } });
+
   return new Response();
 };

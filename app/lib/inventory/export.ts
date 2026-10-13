@@ -23,10 +23,21 @@ import { confidenceText, rateText, stockoutDateText } from "./format";
 // görüntüleyicisi, ne açarsa açsın sütunlar her zaman doğru ayrılmış
 // geliyor. `npm install xlsx` ile eklendi.
 
+// "Bugün sipariş edilecekler" preseti (bkz. ifh_competitor_ideas: "Smart
+// export presets") ham reorderAlerts listesini export eder — bu liste
+// zaten {item, category} şeklinde değil, düz VariantForecast dizisi.
+// Kategoriyi item.method'dan geri çıkarıyoruz (forecastCache.server.ts'teki
+// buildGroups ile birebir aynı kural: already_out_of_stock -> "out",
+// reorderAlerts'e giren diğer her şey zaten "soon" kategorisinden gelir).
+export function categorizeReorderAlert(item: any): Category {
+  return item.method === "already_out_of_stock" ? "out" : "soon";
+}
+
 export function slugifyFilterName(filter: Filter, t: Dictionary, categoryMeta: CategoryMetaMap): string {
   if (filter === "all") return t.filenameAllProducts;
   if (filter === "urgent") return t.filenameUrgentProducts;
   if (filter === "snoozed") return t.filenameSnoozedProducts;
+  if (filter === "topSellers") return t.filenameTopSellers;
   // Dosya adı ASCII olmalı — hem Türkçe hem İngilizce etiketler için
   // aynı normalize zinciri çalışıyor (İngilizce'de zaten aksan yok).
   return categoryMeta[filter].label

@@ -87,3 +87,9 @@ export function stockoutDateText(days: number, locale: Locale): string {
 export function absoluteDateText(date: Date, locale: Locale): string {
   return date.toLocaleDateString(intlLocale(locale), { day: "numeric", month: "long" });
 }
+
+// Grafik eksen etiketleri için kısa biçim (ör. "12 Eyl") — absoluteDateText'in
+// "long" ay adı grafik genişliğinde çok yer kaplıyor.
+export function shortDateText(date: Date, locale: Locale): string {
+  return date.toLocaleDateString(intlLocale(locale), { day: "numeric", month: "short" });
+}
