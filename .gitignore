@@ -36,3 +36,12 @@ snapshot.json
 .react-router/
 # scripts/seed-catalog.ts --plan çıktısı: dev mağaza adını içeren üretilmiş test verisi
 seed-catalog-plan.json
+
+# Yerel geliştirme araçları ve üretilmiş test verisi (repoya ait değil)
+.cursor/
+.gemini/
+.claude/
+.mcp.json
+CLAUDE.md
+AGENTS.md
+seed-plan.json
